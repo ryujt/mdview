@@ -26,6 +26,40 @@ PREFIX=/usr/local ./install.sh   # 설치 경로 변경 ($PREFIX/bin)
 프로젝트 루트에 `config.json`(git 무시됨, `config.example.json` 참고)이 있으면
 설치 시 `~/.config/mdview/config.json`으로 함께 복사됩니다 (권한 0600).
 
+## 맥 배포 패키지 빌드 (.pkg)
+
+Go가 설치되지 않은 맥에 배포할 때는 `.pkg` 인스톨러를 만듭니다.
+arm64 + Intel 유니버설 바이너리가 `/usr/local/bin/mdview`로 설치됩니다.
+
+```bash
+./build-pkg.sh                 # dist/mdview-<버전>-macos-universal.pkg 생성
+VERSION=1.2.3 ./build-pkg.sh   # 버전 지정 (기본: git tag → 1.0.0)
+```
+
+### 서명·공증
+
+himytv와 동일한 Mediawave Developer ID 인증서(팀 `23B9Q752EU`)를 기본으로 사용합니다.
+키체인에 인증서가 있으면 자동으로 **바이너리 codesign → pkg productsign → notarytool 공증(`AC_PASSWORD` 프로필) → staple**까지
+수행하고, 없으면 미서명 pkg를 만들고 안내를 출력합니다.
+
+- 필요한 인증서 (Xcode 또는 developer.apple.com에서 키체인에 설치):
+  - `Developer ID Application: Mediawave (23B9Q752EU)` — 바이너리 서명
+  - `Developer ID Installer: Mediawave (23B9Q752EU)` — pkg 서명
+- 공증 자격 증명 (최초 1회):
+  ```bash
+  xcrun notarytool store-credentials AC_PASSWORD \
+    --apple-id YOUR_APPLE_ID --team-id 23B9Q752EU --password APP_SPECIFIC_PASSWORD
+  ```
+- 다른 인증서를 쓰려면 `APP_SIGN_IDENTITY` / `PKG_SIGN_IDENTITY` / `TEAM_ID` / `NOTARY_PROFILE`
+  환경변수로 재정의합니다.
+
+- 받는 사람은 pkg 파일을 더블클릭해 설치하면 됩니다. 미서명 pkg는 Gatekeeper 경고가 뜨므로
+  Finder에서 **우클릭 → 열기**로 설치합니다 (AirDrop/USB 전달 시에는 경고 없음).
+- `config.json`(API 키)은 개인 설정이므로 pkg에 포함되지 않습니다.
+  전사 기능을 쓰려면 설치 후 `~/.config/mdview/config.json`을 직접 만들거나
+  `OPENAI_API_KEY` 환경변수를 설정하세요.
+- 제거: `sudo rm /usr/local/bin/mdview && sudo pkgutil --forget com.ryujt.mdview`
+
 ## 실행
 
 ```bash
