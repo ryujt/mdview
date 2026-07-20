@@ -1,0 +1,745 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+:root {
+  --sidebar-width: 260px;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+  color: #24292e;
+  background: #ffffff;
+}
+
+#layout {
+  display: flex;
+  min-height: 100vh;
+}
+
+#content {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+#sidebar {
+  flex: 0 0 var(--sidebar-width);
+  width: var(--sidebar-width);
+  max-height: 100vh;
+  position: sticky;
+  top: 0;
+  overflow-y: auto;
+  background: #f6f8fa;
+  border-right: 1px solid #e1e4e8;
+  font-size: 13px;
+}
+
+#sidebar-resizer {
+  flex: 0 0 6px;
+  margin-left: -3px;
+  margin-right: -3px;
+  position: sticky;
+  top: 0;
+  align-self: stretch;
+  max-height: 100vh;
+  height: 100vh;
+  cursor: col-resize;
+  background: transparent;
+  z-index: 5;
+  transition: background 0.15s ease;
+}
+
+#sidebar-resizer:hover,
+#sidebar-resizer.dragging {
+  background: rgba(3, 102, 214, 0.35);
+}
+
+body.resizing-sidebar {
+  cursor: col-resize;
+  user-select: none;
+}
+
+body.resizing-sidebar #preview,
+body.resizing-sidebar iframe {
+  pointer-events: none;
+}
+
+#sidebar-header {
+  padding: 10px 14px;
+  border-bottom: 1px solid #e1e4e8;
+  font-weight: 600;
+  color: #24292e;
+  background: #eef1f4;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+#tree {
+  padding: 8px 4px 16px;
+}
+
+.tree-list {
+  list-style: none;
+  margin: 0;
+  padding-left: 14px;
+}
+
+.tree-dir {
+  margin: 2px 0;
+}
+
+.tree-dir-label {
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #24292e;
+  list-style: none;
+  user-select: none;
+}
+
+.tree-dir-label::-webkit-details-marker {
+  display: none;
+}
+
+.tree-dir-label::before {
+  content: "▸";
+  display: inline-block;
+  width: 12px;
+  color: #6a737d;
+  transition: transform 0.1s ease;
+}
+
+.tree-dir[open] > .tree-dir-label::before {
+  transform: rotate(90deg);
+}
+
+.tree-dir-label:hover {
+  background: #e1e4e8;
+}
+
+.tree-file {
+  display: block;
+  width: 100%;
+  padding: 3px 10px 3px 24px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  color: #0366d6;
+  cursor: pointer;
+  border-radius: 4px;
+  font: inherit;
+}
+
+.tree-file:hover {
+  background: #e1e4e8;
+}
+
+.tree-file.active {
+  background: #0366d6;
+  color: #ffffff;
+}
+
+.tree-error {
+  padding: 12px;
+  color: #dc3545;
+}
+
+#empty-state {
+  padding: 24px 16px;
+  color: #6a737d;
+  text-align: center;
+}
+
+#header-bar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 16px;
+  background: #f6f8fa;
+  border-bottom: 1px solid #e1e4e8;
+  font-size: 13px;
+  color: #586069;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+#filename-display {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 툴바 (녹화 컨트롤) */
+#toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+  flex: none;
+}
+
+#record-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #d73a49;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+#record-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #d73a49;
+  animation: record-pulse 1.2s ease-in-out infinite;
+}
+
+#record-events {
+  color: #586069;
+}
+
+/* 마이크 입력 레벨 미터 */
+#record-level {
+  width: 42px;
+  height: 6px;
+  border-radius: 3px;
+  background: #e1e4e8;
+  overflow: hidden;
+}
+
+#record-level-bar {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: 3px;
+  background: #2ea44f;
+  transition: width 0.06s linear;
+}
+
+@keyframes record-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+
+/* 녹음 입력 장치 선택 */
+#record-device {
+  max-width: 180px;
+  height: 28px;
+  padding: 0 6px;
+  font: inherit;
+  font-size: 12px;
+  color: #24292e;
+  background: #ffffff;
+  border: 1px solid #e1e4e8;
+  border-radius: 6px;
+  cursor: pointer;
+  text-overflow: ellipsis;
+}
+
+#record-device:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* 백그라운드 작업(업로드/전사) 상태 칩 */
+#job-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+#job-status.done {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #047857;
+}
+
+.job-spinner {
+  width: 10px;
+  height: 10px;
+  border: 2px solid rgba(29, 78, 216, 0.25);
+  border-top-color: #1d4ed8;
+  border-radius: 50%;
+  animation: job-spin 0.8s linear infinite;
+}
+
+@keyframes job-spin {
+  to { transform: rotate(360deg); }
+}
+
+#record-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid #e1e4e8;
+  border-radius: 6px;
+  background: #ffffff;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+#record-button:hover {
+  background: #f3f4f6;
+  border-color: #d73a49;
+}
+
+#record-button .rec-icon {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #d73a49;
+  transition: border-radius 0.15s ease;
+}
+
+#record-button.recording {
+  border-color: #d73a49;
+  background: #ffeef0;
+}
+
+/* 녹화 중에는 정지(사각형) 아이콘으로 변형 */
+#record-button.recording .rec-icon {
+  border-radius: 2px;
+}
+
+/* 녹화 중 클릭 포커스 표시: 마크다운 블록 */
+#preview .focus-block {
+  background: rgba(255, 212, 0, 0.14);
+  outline: 2px solid #f9c513;
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+/* 녹화 중 클릭 포커스 표시: 코드뷰어 라인 오버레이 */
+#preview .code-focus-line {
+  position: absolute;
+  left: 0;
+  background: rgba(255, 212, 0, 0.22);
+  pointer-events: none;
+}
+
+/* 녹화 저장 결과 토스트 */
+#record-toast {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 1000;
+  max-width: 480px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: #24292e;
+  color: #ffffff;
+  border-radius: 8px;
+  font-size: 13px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  word-break: break-all;
+}
+
+#record-toast[hidden] {
+  display: none;
+}
+
+#record-toast span {
+  white-space: pre-line; /* 저장 경로/전사 안내 줄바꿈 표시 */
+}
+
+#record-toast.error {
+  background: #86181d;
+}
+
+#record-toast button {
+  flex: none;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: #ffffff;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+#record-toast button:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+#record-toast .toast-close {
+  border: 0;
+  padding: 4px 6px;
+}
+
+main {
+  padding: 16px 24px;
+}
+
+#preview {
+  max-width: none;
+  margin: 0;
+}
+
+#preview h1,
+#preview h2,
+#preview h3,
+#preview h4,
+#preview h5,
+#preview h6 {
+  margin-top: 24px;
+  margin-bottom: 16px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: #24292e;
+}
+
+#preview h1 {
+  font-size: 2em;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid #eaecef;
+}
+
+#preview h2 {
+  font-size: 1.5em;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid #eaecef;
+}
+
+#preview h3 { font-size: 1.25em; }
+#preview h4 { font-size: 1em; }
+#preview h5 { font-size: 0.875em; }
+#preview h6 { font-size: 0.85em; color: #6a737d; }
+
+#preview p {
+  margin-top: 0;
+  margin-bottom: 16px;
+}
+
+#preview a {
+  color: #0366d6;
+  text-decoration: none;
+}
+
+#preview a:hover {
+  text-decoration: underline;
+}
+
+#preview strong { font-weight: 600; }
+
+#preview em { font-style: italic; }
+
+#preview code {
+  padding: 0.2em 0.4em;
+  margin: 0;
+  font-size: 85%;
+  background: rgba(27, 31, 35, 0.05);
+  border-radius: 3px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+#preview pre {
+  margin-top: 0;
+  margin-bottom: 16px;
+  padding: 16px;
+  overflow: auto;
+  font-size: 85%;
+  line-height: 1.45;
+  background: #f6f8fa;
+  border-radius: 6px;
+}
+
+#preview pre code {
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+  font-size: 100%;
+  white-space: pre;
+}
+
+#preview blockquote {
+  margin: 0 0 16px;
+  padding: 0 1em;
+  color: #6a737d;
+  border-left: 0.25em solid #dfe2e5;
+}
+
+#preview blockquote > :first-child { margin-top: 0; }
+#preview blockquote > :last-child { margin-bottom: 0; }
+
+#preview ul,
+#preview ol {
+  margin-top: 0;
+  margin-bottom: 16px;
+  padding-left: 2em;
+}
+
+#preview li {
+  margin-bottom: 4px;
+}
+
+#preview li + li {
+  margin-top: 4px;
+}
+
+#preview ul ul,
+#preview ul ol,
+#preview ol ol,
+#preview ol ul {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+#preview table {
+  display: block;
+  width: 100%;
+  overflow: auto;
+  border-collapse: collapse;
+  margin-top: 0;
+  margin-bottom: 16px;
+}
+
+#preview th {
+  font-weight: 600;
+  background: #f6f8fa;
+}
+
+#preview th,
+#preview td {
+  padding: 6px 13px;
+  border: 1px solid #dfe2e5;
+}
+
+#preview tr:nth-child(even) {
+  background: #f6f8fa;
+}
+
+#preview img {
+  max-width: 100%;
+  box-sizing: content-box;
+}
+
+#preview hr {
+  height: 0.25em;
+  padding: 0;
+  margin: 24px 0;
+  background-color: #e1e4e8;
+  border: 0;
+}
+
+.mermaid {
+  text-align: center;
+  margin: 24px 0;
+}
+
+.jobflow-diagram {
+  margin: 24px 0;
+  overflow-x: auto;
+}
+
+.jobflow-diagram svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.layout-diagram {
+  margin: 24px 0;
+}
+
+.state-diagram {
+  margin: 24px 0;
+  text-align: center;
+}
+
+.navigation-diagram {
+  margin: 24px 0;
+  text-align: center;
+}
+
+.layout-preview {
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 12px;
+  background: #f8f9fa;
+  padding: 16px;
+  border-radius: 8px;
+}
+
+.layout-container {
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  background: white;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.layout-vertical {
+  flex-direction: column;
+}
+
+.layout-horizontal {
+  flex-direction: row;
+  align-items: stretch;
+}
+
+.layout-component {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 8px 12px;
+  border: 1px dashed #adb5bd;
+  border-radius: 4px;
+  background: #e9ecef;
+  color: #495057;
+  text-align: center;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+.layout-horizontal > .layout-container,
+.layout-horizontal > .layout-component {
+  flex: 1 0 0%;
+}
+
+.layout-error {
+  color: #dc3545;
+  padding: 16px;
+  text-align: center;
+}
+
+.relative {
+  position: relative;
+}
+
+.w-full {
+  width: 100%;
+}
+
+.my-6 {
+  margin-top: 24px;
+  margin-bottom: 24px;
+}
+
+.copy-button {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: #586069;
+  background: #f6f8fa;
+  border: 1px solid #e1e4e8;
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.relative:hover .copy-button {
+  opacity: 1;
+}
+
+.copy-button:hover {
+  background: #e1e4e8;
+  color: #24292e;
+}
+
+@media (max-width: 768px) {
+  main {
+    padding: 12px 12px;
+  }
+
+  #header-bar {
+    padding: 6px 12px;
+  }
+
+  #preview h1 { font-size: 1.6em; }
+  #preview h2 { font-size: 1.3em; }
+}
+
+/* SmartMD callouts / figures / captions / front matter banner */
+#preview .smart-frontmatter { background: #fef3c7; border: 1px solid #fde68a; border-radius: 6px; padding: 10px 14px; font-size: 0.85rem; margin-bottom: 1.25rem; color: #78350f; }
+#preview .smart-frontmatter strong { color: #92400e; }
+#preview .smart-frontmatter > div { margin: 2px 0; }
+#preview .smart-callout { border-left: 4px solid #3b82f6; background: #eff6ff; padding: 10px 14px; margin: 12px 0; border-radius: 4px; }
+#preview .smart-callout.success { border-color: #10b981; background: #ecfdf5; }
+#preview .smart-callout.warning { border-color: #f59e0b; background: #fffbeb; }
+#preview .smart-callout.danger  { border-color: #ef4444; background: #fef2f2; }
+#preview .smart-callout.info    { border-color: #3b82f6; background: #eff6ff; }
+#preview .smart-callout > .smart-callout-title { font-weight: 600; margin-bottom: 4px; }
+#preview .smart-callout > :first-child { margin-top: 0; }
+#preview .smart-callout > :last-child { margin-bottom: 0; }
+#preview .smart-figure { margin: 14px 0; padding: 12px; border: 1px dashed #cbd5e1; border-radius: 6px; background: #f8fafc; }
+#preview .smart-figure > .smart-figure-caption { margin-top: 8px; font-size: 0.8rem; color: #475569; text-align: center; }
+#preview .smart-figure img { max-width: 100%; height: auto; }
+#preview .smart-caption { font-size: 0.85rem; font-weight: 600; color: #475569; margin: 14px 0 4px; padding-left: 8px; border-left: 3px solid #94a3b8; }
+
+/* 코드뷰어 (소스코드/설정 파일) */
+#preview .code-viewer {
+  position: relative; /* 녹화 포커스 라인 오버레이의 기준 */
+  display: flex;
+  align-items: flex-start;
+  border: 1px solid #d1d9e0;
+  border-radius: 6px;
+  background: #ffffff;
+  overflow-x: auto;
+}
+
+#preview .code-viewer pre {
+  margin: 0;
+  padding: 16px 0;
+  background: transparent;
+  border-radius: 0;
+  overflow: visible;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+#preview .code-viewer .code-gutter {
+  position: sticky;
+  left: 0;
+  flex: none;
+  min-width: 44px;
+  padding-left: 10px;
+  padding-right: 12px;
+  text-align: right;
+  color: #8c959f;
+  background: #ffffff;
+  border-right: 1px solid #e1e4e8;
+  user-select: none;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  white-space: pre;
+}
+
+#preview .code-content {
+  flex: 1;
+}
+
+#preview .code-content code {
+  display: block;
+  padding: 0 16px;
+  margin: 0;
+  background: transparent;
+  border-radius: 0;
+  font-size: 100%;
+  white-space: pre;
+}

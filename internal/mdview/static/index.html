@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Markdown Viewer</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/github.min.css" />
+  <link rel="stylesheet" href="/static/css/style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/marked@4/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11.16.0/dist/mermaid.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/languages/dockerfile.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/languages/gradle.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/languages/dart.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/languages/scala.min.js"></script>
+</head>
+<body>
+  <div id="layout">
+    <aside id="sidebar" hidden>
+      <div id="sidebar-header">
+        <span id="sidebar-title">파일</span>
+      </div>
+      <nav id="tree"></nav>
+    </aside>
+    <div id="sidebar-resizer" hidden role="separator" aria-orientation="vertical" aria-label="사이드바 크기 조절" title="드래그하여 크기 조절 (더블클릭으로 초기화)"></div>
+    <div id="content">
+      <header id="header-bar">
+        <span id="filename-display"></span>
+        <div id="toolbar-actions">
+          <span id="job-status" hidden></span>
+          <span id="record-status" hidden>
+            <span id="record-indicator" aria-hidden="true"></span>
+            <span id="record-timer">00:00</span>
+            <span id="record-level" title="마이크 입력 레벨" aria-hidden="true"><span id="record-level-bar"></span></span>
+            <span id="record-events" title="기록된 이벤트 수"></span>
+          </span>
+          <select id="record-device" title="녹음 입력 장치 선택" aria-label="녹음 입력 장치 선택"></select>
+          <button id="record-button" type="button" title="오디오 녹화 시작" aria-label="오디오 녹화 시작" aria-pressed="false">
+            <span class="rec-icon" aria-hidden="true"></span>
+          </button>
+        </div>
+      </header>
+      <main>
+        <div id="empty-state" hidden>왼쪽 사이드바에서 파일을 선택하세요.</div>
+        <div id="preview"></div>
+      </main>
+    </div>
+  </div>
+  <script type="module" src="/static/js/app.js"></script>
+</body>
+</html>
