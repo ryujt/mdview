@@ -241,7 +241,7 @@ logs/
 mdview/
   install.sh                 # 빌드 및 설치 스크립트
   build-pkg.sh               # macOS .pkg 인스톨러 빌드 (universal, 서명·공증)
-  test/                      # 프론트엔드 단위 테스트 (node --test)
+  test/                      # 프론트엔드 단위 테스트 (node --test test/web-url.test.mjs)
   cmd/
     main.go                  # Orchestrator (CLI, 서브커맨드, 와이어링)
   internal/
