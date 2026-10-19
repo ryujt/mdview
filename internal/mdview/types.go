@@ -38,7 +38,7 @@ type RecordingResult struct {
 	Events string `json:"events"`
 	// ID는 녹화 디렉토리 이름 (전사 상태 조회 키)
 	ID string `json:"id"`
-	// Transcribing은 백그라운드 자동 전사가 시작되었는지 여부
+	// Transcribing은 백그라운드 후처리(전사·프롬프트)가 시작되었는지 여부
 	Transcribing bool `json:"transcribing"`
 }
 
@@ -47,6 +47,15 @@ const (
 	TranscribeStateRunning = "transcribing"
 	TranscribeStateDone    = "done"
 	TranscribeStateError   = "error"
+)
+
+// 웹 페이지 조작 이벤트 타입 (events.json의 type 값).
+// 문서 이벤트(open/focus/word/copy)와 구분하기 위해 web- 접두를 둔다.
+const (
+	WebEventOpen     = "web-open"
+	WebEventClick    = "web-click"
+	WebEventDblClick = "web-dblclick"
+	WebEventCopy     = "web-copy"
 )
 
 // TranscribeJob은 녹화 자동 전사 작업의 상태 DTO이다 (/api/recording/status).
@@ -58,6 +67,12 @@ type TranscribeJob struct {
 	Transcript string `json:"transcript,omitempty"`
 	// TranscriptRel은 folder 모드에서 루트 기준 상대 경로 (뷰어에서 바로 열기용)
 	TranscriptRel string `json:"transcriptRel,omitempty"`
-	Error         string `json:"error,omitempty"`
-	UpdatedAt     string `json:"updatedAt"`
+	// Prompt는 항상 생성되는 prompt.txt 절대 경로 (후처리 성공 시)
+	Prompt string `json:"prompt,omitempty"`
+	// PromptRel은 folder 모드에서 루트 기준 상대 경로
+	PromptRel string `json:"promptRel,omitempty"`
+	Error     string `json:"error,omitempty"`
+	// Note는 전사를 생략·실패한 사유 등 사용자에게 보여 줄 짧은 안내
+	Note      string `json:"note,omitempty"`
+	UpdatedAt string `json:"updatedAt"`
 }

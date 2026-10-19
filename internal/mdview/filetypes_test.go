@@ -21,8 +21,10 @@ func TestIsViewablePath(t *testing.T) {
 		{"go.mod", true},
 		{"yarn.lock", true},
 		{"/abs/path/util.go", true},
+		{"notes.txt", true},
+		{"docs/report.pdf", true},
+		{"Report.PDF", true},
 		{"image.png", false},
-		{"notes.txt", false},
 		{"binary", false},
 		{"archive.tar.gz", false},
 		{".envrc", false},
@@ -30,6 +32,24 @@ func TestIsViewablePath(t *testing.T) {
 	for _, c := range cases {
 		if got := IsViewablePath(c.path); got != c.want {
 			t.Errorf("IsViewablePath(%q) = %v, want %v", c.path, got, c.want)
+		}
+	}
+}
+
+func TestIsPDFPath(t *testing.T) {
+	cases := []struct {
+		path string
+		want bool
+	}{
+		{"doc.pdf", true},
+		{"docs/Report.PDF", true},
+		{"doc.pdf.md", false},
+		{"pdf", false},
+		{"a.md", false},
+	}
+	for _, c := range cases {
+		if got := IsPDFPath(c.path); got != c.want {
+			t.Errorf("IsPDFPath(%q) = %v, want %v", c.path, got, c.want)
 		}
 	}
 }

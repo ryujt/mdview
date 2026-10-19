@@ -19,17 +19,18 @@ type transcriptForTest struct {
 		Actions map[string]string `json:"actions"`
 	} `json:"guide"`
 	Timeline []struct {
-		Kind      string `json:"kind"`
-		Action    string `json:"action"`
-		AtMs      int64  `json:"atMs"`
-		StartMs   int64  `json:"startMs"`
-		EndMs     int64  `json:"endMs"`
-		File      string `json:"file"`
-		Line      int    `json:"line"`
-		LineEnd   int    `json:"lineEnd"`
-		Approx    bool   `json:"approx"`
-		Text      string `json:"text"`
-		Selection string `json:"selection"`
+		Kind      string  `json:"kind"`
+		Action    string  `json:"action"`
+		AtMs      int64   `json:"atMs"`
+		StartMs   int64   `json:"startMs"`
+		EndMs     int64   `json:"endMs"`
+		File      string  `json:"file"`
+		Line      int     `json:"line"`
+		LineEnd   int     `json:"lineEnd"`
+		Approx    bool    `json:"approx"`
+		Text      string  `json:"text"`
+		Selection string  `json:"selection"`
+		PDF       *PDFRef `json:"pdf"`
 	} `json:"timeline"`
 }
 
@@ -77,8 +78,13 @@ func fixtureMeta() *RecordingMeta {
 			{T: 8000, Type: "word", File: "doc.md", Line: 5, LineEnd: 5, Text: "오케스트레이터"},
 			{T: 12000, Type: "copy", File: "main.go", Line: 1, LineEnd: 2, Text: "package main\n\nfunc main() {}", Selection: "package main"},
 			{T: 20000, Type: "focus", File: "doc.md", Line: 9, LineEnd: 12, Text: "블록 내용", Approx: true},
+			{T: 26000, Type: "focus", File: "docs/sample.pdf", PDF: &PDFRef{Page: 2, X: floatPtr(0), Y: floatPtr(0.25)}},
 		},
 	}
+}
+
+func floatPtr(v float64) *float64 {
+	return &v
 }
 
 func fixtureResult() *WhisperResult {
@@ -111,12 +117,13 @@ func TestBuildTranscriptJSON(t *testing.T) {
 		}
 	}
 
-	// 발화 3개 + 이벤트 5개가 시간순으로 병합되고, 내부 타입이 행동 이름으로 바뀐다:
+	// 발화 3개 + 이벤트 6개가 시간순으로 병합되고, 내부 타입이 행동 이름으로 바뀐다:
 	// open(0.5s) → speech(5s) → click(6s, focus) → select(8s, word) → speech(10s)
-	// → copy(12s) → speech(18s) → click(20s, focus)
+	// → copy(12s) → speech(18s) → click(20s, focus) → click(26s, PDF focus)
 	wantSeq := []struct{ kind, action string }{
 		{"action", "open"}, {"speech", ""}, {"action", "click"}, {"action", "select"},
 		{"speech", ""}, {"action", "copy"}, {"speech", ""}, {"action", "click"},
+		{"action", "click"},
 	}
 	if len(doc.Timeline) != len(wantSeq) {
 		t.Fatalf("timeline 길이 = %d, want %d\n%s", len(doc.Timeline), len(wantSeq), data)
@@ -143,6 +150,12 @@ func TestBuildTranscriptJSON(t *testing.T) {
 	if last := doc.Timeline[7]; !last.Approx || last.Line != 9 || last.LineEnd != 12 {
 		t.Errorf("approx click 항목 불일치: %+v", last)
 	}
+	pdfClick := doc.Timeline[8]
+	if pdfClick.File != "docs/sample.pdf" || pdfClick.PDF == nil ||
+		pdfClick.PDF.Page != 2 || pdfClick.PDF.X == nil || *pdfClick.PDF.X != 0 ||
+		pdfClick.PDF.Y == nil || *pdfClick.PDF.Y != 0.25 {
+		t.Errorf("PDF click 항목 불일치: %+v", pdfClick)
+	}
 }
 
 func TestBuildTranscriptJSONNoSegments(t *testing.T) {
@@ -154,8 +167,8 @@ func TestBuildTranscriptJSONNoSegments(t *testing.T) {
 	if doc.Model != "medium" {
 		t.Errorf("비기본 모델 이름이 그대로 표기되지 않음: %s", doc.Model)
 	}
-	if len(doc.Timeline) != 5 {
-		t.Errorf("세그먼트가 없어도 이벤트 5개가 나열되어야 함 (got %d)", len(doc.Timeline))
+	if len(doc.Timeline) != 6 {
+		t.Errorf("세그먼트가 없어도 이벤트 6개가 나열되어야 함 (got %d)", len(doc.Timeline))
 	}
 	for _, e := range doc.Timeline {
 		if e.Kind != "action" {
@@ -231,5 +244,88 @@ func TestTranscribeRecordingWithoutEvents(t *testing.T) {
 	doc := parseTranscript(t, data)
 	if len(doc.Timeline) != 1 || doc.Timeline[0].Kind != "speech" || doc.Timeline[0].Text != "테스트" {
 		t.Errorf("이벤트 없는 전사 실패\n%s", data)
+	}
+}
+
+// web-* 이벤트는 action 이름이 문서 이벤트와 같은 어휘(open/click/select/copy)로 바뀌고
+// url·selector 등 웹 필드가 보존되어야 한다.
+func TestBuildTranscriptJSONWebEvents(t *testing.T) {
+	meta := &RecordingMeta{
+		Version: 1, Mode: "folder", Root: "/proj", DurationMs: 30000,
+		Events: []RecordingEvent{
+			{T: 1000, Type: WebEventOpen, URL: "https://example.com/dash"},
+			{T: 2000, Type: WebEventClick, URL: "https://example.com/dash", Title: "Dash",
+				Selector: "main > span.v", Tag: "span", ID: "mau", Classes: "v hi",
+				Text: "12,345", Heading: "핵심 지표", Context: "월간 활성 사용자 12,345"},
+			{T: 3000, Type: WebEventDblClick, URL: "https://example.com/dash", Tag: "p", Selection: "활성"},
+			{T: 4000, Type: WebEventCopy, URL: "https://example.com/dash", Tag: "p", Selection: "12,345"},
+		},
+	}
+	data, err := buildTranscriptJSON(meta, &WhisperResult{}, DefaultTranscribeModel)
+	if err != nil {
+		t.Fatalf("buildTranscriptJSON error: %v", err)
+	}
+	var doc struct {
+		Guide struct {
+			Fields string `json:"fields"`
+		} `json:"guide"`
+		Timeline []map[string]any `json:"timeline"`
+	}
+	if err := json.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("파싱 실패: %v\n%s", err, data)
+	}
+	wantActions := []string{"open", "click", "select", "copy"}
+	if len(doc.Timeline) != len(wantActions) {
+		t.Fatalf("timeline 길이 = %d, want %d\n%s", len(doc.Timeline), len(wantActions), data)
+	}
+	for i, want := range wantActions {
+		if doc.Timeline[i]["action"] != want {
+			t.Errorf("timeline[%d].action = %v, want %s", i, doc.Timeline[i]["action"], want)
+		}
+		if doc.Timeline[i]["url"] != "https://example.com/dash" {
+			t.Errorf("timeline[%d].url = %v", i, doc.Timeline[i]["url"])
+		}
+		if _, has := doc.Timeline[i]["file"]; has {
+			t.Errorf("timeline[%d]에 file 필드가 있음", i)
+		}
+	}
+	click := doc.Timeline[1]
+	for key, want := range map[string]string{
+		"title": "Dash", "selector": "main > span.v", "tag": "span", "id": "mau",
+		"classes": "v hi", "text": "12,345", "heading": "핵심 지표", "context": "월간 활성 사용자 12,345",
+	} {
+		if click[key] != want {
+			t.Errorf("click.%s = %v, want %q", key, click[key], want)
+		}
+	}
+	if !strings.Contains(doc.Guide.Fields, "url") {
+		t.Errorf("guide.fields에 웹 이벤트 설명이 없음: %s", doc.Guide.Fields)
+	}
+}
+
+func TestBuildTranscriptJSONDocEventsHaveNoWebFields(t *testing.T) {
+	data, err := buildTranscriptJSON(fixtureMeta(), fixtureResult(), localWhisperDefault)
+	if err != nil {
+		t.Fatalf("buildTranscriptJSON error: %v", err)
+	}
+	var doc struct {
+		Timeline []map[string]any `json:"timeline"`
+	}
+	if err := json.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("파싱 실패: %v", err)
+	}
+	for i, entry := range doc.Timeline {
+		for _, key := range []string{"url", "title", "selector", "tag", "id", "classes", "heading", "context"} {
+			if _, has := entry[key]; has {
+				t.Errorf("timeline[%d]에 웹 필드 %q가 있음", i, key)
+			}
+		}
+	}
+	var top map[string]any
+	if err := json.Unmarshal(data, &top); err != nil {
+		t.Fatalf("파싱 실패: %v", err)
+	}
+	if _, has := top["droppedWebEvents"]; has {
+		t.Error("최상위에 droppedWebEvents가 있음")
 	}
 }

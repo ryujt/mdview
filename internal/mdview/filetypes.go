@@ -7,6 +7,7 @@ import (
 
 const (
 	markdownExt   = ".md"
+	pdfExt        = ".pdf"
 	envFileName   = ".env"
 	envFilePrefix = ".env."
 )
@@ -15,6 +16,8 @@ const (
 // static/js/code-viewer.js 의 EXT_LANGUAGES/NAME_LANGUAGES 와 동기화를 유지해야 한다.
 var viewableExts = map[string]bool{
 	markdownExt: true,
+	pdfExt:      true,
+	".txt":      true,
 
 	".go":     true,
 	".js":     true,
@@ -98,4 +101,10 @@ func IsViewablePath(p string) bool {
 // IsMarkdownPath는 해당 경로가 마크다운 파일인지 반환한다.
 func IsMarkdownPath(p string) bool {
 	return strings.EqualFold(filepath.Ext(p), markdownExt)
+}
+
+// IsPDFPath는 해당 경로가 PDF 파일인지 반환한다.
+// PDF는 바이너리라 WS 텍스트 프레임으로 내용을 전달하지 않고, 클라이언트가 URL로 다시 읽는다.
+func IsPDFPath(p string) bool {
+	return strings.EqualFold(filepath.Ext(p), pdfExt)
 }

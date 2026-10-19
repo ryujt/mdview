@@ -7,8 +7,11 @@ import (
 	"mime"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
+
+	"github.com/ryujt/mdview/internal/mdview/logging"
 )
 
 // 녹화(오디오 + 이벤트 타임라인) 저장 관련 정책 상수
@@ -76,8 +79,10 @@ func SaveRecording(base string, audio io.Reader, contentType string, meta map[st
 }
 
 const (
-	jsonKeyAudio   = "audio"
-	jsonKeySavedAt = "savedAt"
+	jsonKeyAudio            = "audio"
+	jsonKeySavedAt          = "savedAt"
+	jsonKeyEvents           = "events"
+	jsonKeyDroppedWebEvents = "droppedWebEvents"
 )
 
 // createRecordingDir는 타임스탬프 기반 녹화 디렉토리를 생성한다.
@@ -103,6 +108,55 @@ func createRecordingDir(base string, now time.Time) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("recording dir error: too many recordings at %s", stamp)
+}
+
+// mergeWebEvents는 서버가 수집한 웹 이벤트를 브라우저가 보낸 meta.events에 합치고 t순으로 안정 정렬한다.
+// 문서 이벤트는 브라우저가 시간순으로 보냈고 먼저 들어가므로, 같은 t에서는 문서 이벤트가 앞선다.
+func mergeWebEvents(meta map[string]any, webEvents []RecordingEvent, dropped int) {
+	var existing []any
+	if v, has := meta[jsonKeyEvents]; has {
+		var ok bool
+		if existing, ok = v.([]any); !ok {
+			logging.Warn("[Recording] meta.events가 배열이 아니라 웹 이벤트만으로 대체: %T", v)
+		}
+	}
+	merged := make([]any, 0, len(existing)+len(webEvents))
+	merged = append(merged, existing...)
+	for _, e := range webEvents {
+		if m := eventToMap(e); m != nil {
+			merged = append(merged, m)
+		}
+	}
+	sort.SliceStable(merged, func(i, j int) bool { return eventTime(merged[i]) < eventTime(merged[j]) })
+	meta[jsonKeyEvents] = merged
+	if dropped > 0 {
+		meta[jsonKeyDroppedWebEvents] = dropped
+	} else {
+		delete(meta, jsonKeyDroppedWebEvents)
+	}
+}
+
+// eventToMap은 타입 있는 이벤트를 JSON 왕복으로 map으로 바꾼다 (omitempty 규칙을 그대로 적용하기 위해).
+func eventToMap(e RecordingEvent) map[string]any {
+	data, err := json.Marshal(e)
+	if err != nil {
+		return nil
+	}
+	var m map[string]any
+	if err := json.Unmarshal(data, &m); err != nil {
+		return nil
+	}
+	return m
+}
+
+// eventTime은 map 이벤트의 t를 읽는다 (JSON 디코딩 결과는 float64).
+func eventTime(v any) float64 {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return 0
+	}
+	t, _ := m["t"].(float64)
+	return t
 }
 
 // summarizeRecordingEvents는 업로드 메타의 이벤트 목록을 로그용 한 줄 요약으로 만든다.

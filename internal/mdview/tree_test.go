@@ -1,6 +1,7 @@
 package mdview
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -17,24 +18,24 @@ func mustWrite(t *testing.T, root, rel string) {
 	}
 }
 
-func collectPaths(node *TreeNode, paths map[string]bool) {
-	if !node.IsDir {
-		paths[node.Path] = true
-		return
-	}
-	if node.Path != "" {
-		paths[node.Path+"/"] = true
-	}
+func levelPaths(node *TreeNode) map[string]bool {
+	paths := map[string]bool{}
 	for _, child := range node.Children {
-		collectPaths(child, paths)
+		key := child.Path
+		if child.IsDir {
+			key += "/"
+		}
+		paths[key] = true
 	}
+	return paths
 }
 
-func TestBuildTreeFiltersViewable(t *testing.T) {
+func TestBuildTreeLevelListsSingleLevel(t *testing.T) {
 	root := t.TempDir()
 	mustWrite(t, root, "a.md")
 	mustWrite(t, root, "b.go")
 	mustWrite(t, root, "c.png")
+	mustWrite(t, root, "notes.txt")
 	mustWrite(t, root, "node_modules/x.js")
 	mustWrite(t, root, "src/util.go")
 	mustWrite(t, root, "assets/logo.svg")
@@ -42,21 +43,71 @@ func TestBuildTreeFiltersViewable(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tree, err := BuildTree(root)
+	level, err := BuildTreeLevel(root, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	paths := map[string]bool{}
-	collectPaths(tree, paths)
+	if !level.IsDir || level.Path != "" {
+		t.Errorf("루트 노드 불일치: %+v", level)
+	}
+	paths := levelPaths(level)
 
-	for _, want := range []string{"a.md", "b.go", "src/util.go", "src/"} {
+	// 뷰어 대상 파일과 (배제 목록 외) 모든 하위 디렉토리가 1레벨로 노출된다.
+	for _, want := range []string{"a.md", "b.go", "notes.txt", "src/", "assets/", "empty/"} {
 		if !paths[want] {
-			t.Errorf("expected %q in tree, got %v", want, paths)
+			t.Errorf("expected %q in level, got %v", want, paths)
 		}
 	}
-	for _, exclude := range []string{"c.png", "node_modules/x.js", "node_modules/", "assets/", "empty/"} {
+	for _, exclude := range []string{"c.png", "node_modules/", "src/util.go"} {
 		if paths[exclude] {
 			t.Errorf("expected %q to be excluded, got %v", exclude, paths)
+		}
+	}
+	// 하위 디렉토리의 내용은 조회하지 않는다.
+	for _, child := range level.Children {
+		if len(child.Children) != 0 {
+			t.Errorf("1레벨 응답에 하위 내용이 포함됨: %+v", child)
+		}
+	}
+
+	sub, err := BuildTreeLevel(root, "src")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if subPaths := levelPaths(sub); !subPaths["src/util.go"] {
+		t.Errorf("src 레벨에 util.go가 없음: %v", subPaths)
+	}
+}
+
+func TestBuildTreeLevelPathErrors(t *testing.T) {
+	root := t.TempDir()
+	mustWrite(t, root, "doc.md")
+
+	if _, err := BuildTreeLevel(root, ".."); !errors.Is(err, errTreePath) {
+		t.Errorf("잘못된 경로 오류가 errTreePath로 식별되지 않음: %v", err)
+	}
+	if _, err := BuildTreeLevel(root, "missing"); !errors.Is(err, errTreePath) {
+		t.Errorf("없는 경로 오류가 errTreePath로 식별되지 않음: %v", err)
+	}
+	if _, err := BuildTreeLevel(root, ""); err != nil {
+		t.Errorf("루트 조회 실패: %v", err)
+	}
+}
+
+func TestResolveRelDir(t *testing.T) {
+	root := t.TempDir()
+	mustWrite(t, root, "src/util.go")
+	mustWrite(t, root, "node_modules/x.js")
+	mustWrite(t, root, "doc.md")
+
+	for _, rel := range []string{"", "src"} {
+		if _, err := ResolveRelDir(root, rel); err != nil {
+			t.Errorf("ResolveRelDir(%q) unexpected error: %v", rel, err)
+		}
+	}
+	for _, rel := range []string{"..", "../outside", "node_modules", "src/../node_modules", "doc.md", "missing"} {
+		if _, err := ResolveRelDir(root, rel); err == nil {
+			t.Errorf("ResolveRelDir(%q) expected error", rel)
 		}
 	}
 }

@@ -24,10 +24,10 @@ const (
 
 // 환경변수 설정
 const (
-	envDebugMode = "DEBUG_MODE"   // true여야 텍스트 로그가 출력됨
-	envLogToFile = "LOG_TO_FILE"  // true여야 파일(세션/아티팩트)에 기록됨
-	envLogDir    = "LOG_DIR"      // 로그 디렉토리 (기본 logs)
-	envLogLevel  = "LOG_LEVEL"    // DEBUG/INFO/WARN/ERROR (기본 INFO)
+	envDebugMode = "DEBUG_MODE"  // true여야 텍스트 로그가 출력됨
+	envLogToFile = "LOG_TO_FILE" // true여야 파일(세션/아티팩트)에 기록됨
+	envLogDir    = "LOG_DIR"     // 로그 디렉토리 (기본 logs)
+	envLogLevel  = "LOG_LEVEL"   // DEBUG/INFO/WARN/ERROR (기본 INFO)
 
 	defaultLogDir      = "logs"
 	maxLogAgeDays      = 7

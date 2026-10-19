@@ -3,6 +3,7 @@ package mdview
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -60,27 +61,48 @@ type WhisperResult struct {
 
 // RecordingEvent는 events.json에 기록된 단일 이벤트이다.
 type RecordingEvent struct {
-	T         int64  `json:"t"`
-	Type      string `json:"type"`
-	File      string `json:"file,omitempty"`
-	Line      int    `json:"line,omitempty"`
-	LineEnd   int    `json:"lineEnd,omitempty"`
-	Text      string `json:"text,omitempty"`
-	Selection string `json:"selection,omitempty"`
-	Approx    bool   `json:"approx,omitempty"`
+	T         int64   `json:"t"`
+	Type      string  `json:"type"`
+	File      string  `json:"file,omitempty"`
+	Line      int     `json:"line,omitempty"`
+	LineEnd   int     `json:"lineEnd,omitempty"`
+	Text      string  `json:"text,omitempty"`
+	Selection string  `json:"selection,omitempty"`
+	Approx    bool    `json:"approx,omitempty"`
+	PDF       *PDFRef `json:"pdf,omitempty"`
+	// 웹 페이지 조작(web-*) 전용 필드. 문서 이벤트에서는 비어 있다.
+	URL      string `json:"url,omitempty"`
+	Title    string `json:"title,omitempty"`
+	Selector string `json:"selector,omitempty"`
+	Tag      string `json:"tag,omitempty"`
+	ID       string `json:"id,omitempty"`
+	Classes  string `json:"classes,omitempty"`
+	Heading  string `json:"heading,omitempty"`
+	Context  string `json:"context,omitempty"`
+}
+
+// PDFRef는 PDF 문서 내 참조 위치이다. 라인 번호가 없는 PDF는 페이지 번호와
+// 페이지 좌상단 기준 0~1 정규화 좌표(x, y)로 위치를 표현한다.
+// 좌표가 없는 이벤트(선택/복사)는 페이지 번호만 기록되므로 X/Y는 포인터로 구분한다.
+type PDFRef struct {
+	Page int      `json:"page"`
+	X    *float64 `json:"x,omitempty"`
+	Y    *float64 `json:"y,omitempty"`
 }
 
 // RecordingMeta는 events.json 전체 구조이다.
 type RecordingMeta struct {
-	Version    int              `json:"version"`
-	Mode       string           `json:"mode"`
-	Root       string           `json:"root,omitempty"`
-	File       string           `json:"file,omitempty"`
-	StartedAt  string           `json:"startedAt"`
-	SavedAt    string           `json:"savedAt"`
-	DurationMs int64            `json:"durationMs"`
-	Audio      string           `json:"audio"`
-	Events     []RecordingEvent `json:"events"`
+	Version    int    `json:"version"`
+	Mode       string `json:"mode"`
+	Root       string `json:"root,omitempty"`
+	File       string `json:"file,omitempty"`
+	StartedAt  string `json:"startedAt"`
+	SavedAt    string `json:"savedAt"`
+	DurationMs int64  `json:"durationMs"`
+	Audio      string `json:"audio"`
+	// DroppedWebEvents는 검증·상한으로 폐기된 웹 이벤트 수이다.
+	DroppedWebEvents int              `json:"droppedWebEvents,omitempty"`
+	Events           []RecordingEvent `json:"events"`
 }
 
 // TranscribeRecording은 녹화 디렉토리의 오디오를 전사해 transcript.json을 생성하는
@@ -102,6 +124,10 @@ func TranscribeRecording(dir, model, lang string) (string, error) {
 	resultPath := whisperResultPath(absDir, audioPath)
 	if _, err := os.Stat(resultPath); os.IsNotExist(err) {
 		started := time.Now()
+		if err := validateRecordingAudio(audioPath); err != nil {
+			logging.LogProcessEvent("execution", "step_err", "오디오 형식 검증 실패: "+err.Error(), nil)
+			return "", err
+		}
 		if isAPIModel(model) {
 			apiKey, err := ResolveOpenAIKey()
 			if err != nil {
@@ -170,6 +196,31 @@ func TranscribeRecording(dir, model, lang string) (string, error) {
 	return outPath, nil
 }
 
+// TranscribeSkipReason은 자동 전사를 생략해야 하는 이유를 반환한다 (빈 문자열이면 전사 가능).
+// 이미 whisper 결과가 있으면 키·크기와 무관하게 재사용할 수 있고, 로컬 CLI 모델은 API 제약을 받지 않는다.
+func TranscribeSkipReason(dir, model string) string {
+	audioPath, err := findRecordingAudio(dir)
+	if err != nil {
+		return "오디오 파일이 없습니다"
+	}
+	if _, err := os.Stat(whisperResultPath(dir, audioPath)); err == nil {
+		return ""
+	}
+	if !isAPIModel(model) {
+		return ""
+	}
+	if _, err := ResolveOpenAIKey(); err != nil {
+		if !errors.Is(err, ErrNoOpenAIKey) {
+			return "OpenAI API 키를 읽을 수 없습니다: " + err.Error()
+		}
+		return ErrNoOpenAIKey.Error()
+	}
+	if size := fileSize(audioPath); size > maxAPIAudioBytes {
+		return fmt.Sprintf("오디오가 %dMB로 API 업로드 상한(%dMB)을 초과합니다", size>>20, maxAPIAudioBytes>>20)
+	}
+	return ""
+}
+
 // findRecordingAudio는 녹화 디렉토리에서 오디오 파일(audio.*)을 찾는다.
 func findRecordingAudio(dir string) (string, error) {
 	entries, err := os.ReadDir(dir)
@@ -211,9 +262,10 @@ func runWhisperAPI(resultPath, audioPath, model, lang, apiKey string) (string, e
 	fmt.Printf("전사 실행: %s (%s)\n", modelDisplayName(model), filepath.Base(audioPath))
 	started := time.Now()
 	audioBytes := fileSize(audioPath)
+	uploadName := transcribeUploadName(audioPath)
 	requestSummary := fmt.Sprintf(
 		"POST %s/audio/transcriptions\nmodel=%s\nresponse_format=verbose_json\ntimestamp_granularities[]=segment\nlanguage=%s\nfile=%s (%d bytes)",
-		openaiAPIBase, model, orDefault(lang, "(자동 감지)"), filepath.Base(audioPath), audioBytes)
+		openaiAPIBase, model, orDefault(lang, "(자동 감지)"), uploadName, audioBytes)
 
 	// 실패 시에도 상세 로그를 남기는 헬퍼
 	fail := func(err error) (string, error) {
@@ -230,7 +282,7 @@ func runWhisperAPI(resultPath, audioPath, model, lang, apiKey string) (string, e
 
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
-	part, err := mw.CreateFormFile("file", filepath.Base(audioPath))
+	part, err := mw.CreateFormFile("file", uploadName)
 	if err != nil {
 		return fail(err)
 	}
@@ -413,24 +465,37 @@ type speechEntry struct {
 }
 
 type actionEntry struct {
-	Kind      string `json:"kind"`   // "action"
-	Action    string `json:"action"` // open | click | select | copy
-	AtMs      int64  `json:"atMs"`
-	File      string `json:"file,omitempty"`
-	Line      int    `json:"line,omitempty"`
-	LineEnd   int    `json:"lineEnd,omitempty"`
-	Approx    bool   `json:"approx,omitempty"`
-	Text      string `json:"text,omitempty"`
-	Selection string `json:"selection,omitempty"`
+	Kind      string  `json:"kind"`   // "action"
+	Action    string  `json:"action"` // open | click | select | copy
+	AtMs      int64   `json:"atMs"`
+	File      string  `json:"file,omitempty"`
+	Line      int     `json:"line,omitempty"`
+	LineEnd   int     `json:"lineEnd,omitempty"`
+	Approx    bool    `json:"approx,omitempty"`
+	Text      string  `json:"text,omitempty"`
+	Selection string  `json:"selection,omitempty"`
+	PDF       *PDFRef `json:"pdf,omitempty"`
+	URL       string  `json:"url,omitempty"`
+	Title     string  `json:"title,omitempty"`
+	Selector  string  `json:"selector,omitempty"`
+	Tag       string  `json:"tag,omitempty"`
+	ID        string  `json:"id,omitempty"`
+	Classes   string  `json:"classes,omitempty"`
+	Heading   string  `json:"heading,omitempty"`
+	Context   string  `json:"context,omitempty"`
 }
 
 // actionNameByEventType은 events.json의 내부 이벤트 타입을
 // 사용자 행동이 그대로 드러나는 액션 이름으로 바꾼다.
 var actionNameByEventType = map[string]string{
-	"open":  "open",
-	"focus": "click",
-	"word":  "select",
-	"copy":  "copy",
+	"open":           "open",
+	"focus":          "click",
+	"word":           "select",
+	"copy":           "copy",
+	WebEventOpen:     "open",
+	WebEventClick:    "click",
+	WebEventDblClick: "select",
+	WebEventCopy:     "copy",
 }
 
 func transcriptGuideText() transcriptGuide {
@@ -438,12 +503,17 @@ func transcriptGuideText() transcriptGuide {
 		Timeline: "발화(kind=speech)와 사용자 상호작용(kind=action)을 시간순으로 병합한 목록. 모든 시간은 녹음 시작 기준 ms.",
 		Speech:   "오디오에서 전사된 발화 구간. text가 실제 발화 내용이다 (startMs~endMs).",
 		Actions: map[string]string{
-			"open":   "사용자가 파일을 열람함",
-			"click":  "사용자가 본문 라인/블록을 클릭해 가리킴 (text=해당 위치의 원문)",
-			"select": "사용자가 더블클릭으로 단어/텍스트를 선택해 지칭함 (text=선택된 문자열)",
-			"copy":   "사용자가 텍스트를 클립보드로 복사함 (text=원본 라인 전체, selection=실제 복사된 문자열)",
+			"open":   "사용자가 파일을 열람함 (url이 있으면 웹 페이지를 열어 들어감)",
+			"click":  "사용자가 본문 라인/블록을 클릭해 가리킴 (text=해당 위치의 원문). 웹이면 클릭한 요소 (text=요소 텍스트, selector/tag/id/classes=요소 정보)",
+			"select": "사용자가 더블클릭으로 단어/텍스트를 선택해 지칭함 (text=선택된 문자열). 웹이면 selection=선택 문자열",
+			"copy":   "사용자가 텍스트를 클립보드로 복사함 (text=원본 라인 전체, selection=실제 복사된 문자열). 웹이면 selection=복사 시점의 선택 문자열",
 		},
-		Fields: "file/line/lineEnd는 원본 파일 기준 위치. approx=true면 라인 번호가 근사값.",
+		Fields: "file/line/lineEnd는 원본 파일 기준 위치. approx=true면 라인 번호가 근사값. " +
+			"PDF 문서는 line 대신 pdf.page(1부터)와 pdf.x/pdf.y(페이지 좌상단 기준 0~1 정규화 클릭 좌표)를 사용하며, " +
+			"click의 text는 클릭 지점 주변 텍스트다. " +
+			"url이 있으면 웹 페이지 조작이다: file 대신 조작 당시 페이지 주소(url)·제목(title)과 요소 정보(selector/tag/id/classes), " +
+			"요소 텍스트(text), 가장 가까운 제목(heading), 주변 텍스트(context)를 가진다. " +
+			"selector는 다시 클릭할 정확한 경로가 아니라 요소를 알아볼 단서다.",
 	}
 }
 
@@ -473,7 +543,9 @@ func buildTranscriptJSON(meta *RecordingMeta, result *WhisperResult, model strin
 		items = append(items, timed{at: e.T, rank: 1, entry: actionEntry{
 			Kind: "action", Action: action, AtMs: e.T,
 			File: e.File, Line: e.Line, LineEnd: e.LineEnd, Approx: e.Approx,
-			Text: e.Text, Selection: e.Selection,
+			Text: e.Text, Selection: e.Selection, PDF: e.PDF,
+			URL: e.URL, Title: e.Title, Selector: e.Selector, Tag: e.Tag, ID: e.ID,
+			Classes: e.Classes, Heading: e.Heading, Context: e.Context,
 		}})
 	}
 	sort.SliceStable(items, func(i, j int) bool {

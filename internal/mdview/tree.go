@@ -2,11 +2,16 @@ package mdview
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 )
+
+// errTreePath는 클라이언트가 요청한 트리 경로가 유효하지 않음을 나타낸다.
+// 핸들러가 서버 내부 오류(500)와 잘못된 요청(400)을 구분하는 데 쓴다.
+var errTreePath = errors.New("invalid tree path")
 
 // 사용자 홈/프로젝트 폴더에 흔한 무거운 디렉토리는 트리에서 제외한다.
 var excludedDirs = map[string]bool{
@@ -24,91 +29,56 @@ var excludedDirs = map[string]bool{
 	".vscode":      true,
 }
 
-// BuildTree는 root 기준 뷰어 대상 파일 + 해당 파일을 포함하는 디렉토리로만 이루어진 트리를 만든다.
+// BuildTreeLevel은 rel 디렉토리 바로 아래 1레벨(하위 디렉토리 + 뷰어 대상 파일)만 구성한다.
+// 하위 디렉토리의 내용은 조회하지 않는다 — 사이드바가 폴더를 펼칠 때마다 다시 요청한다.
 // Path 필드는 root 기준 상대 경로이며 슬래시로 구분된다(OS 독립적 표현).
-func BuildTree(root string) (*TreeNode, error) {
-	absRoot, err := filepath.Abs(root)
+func BuildTreeLevel(root, rel string) (*TreeNode, error) {
+	absDir, err := ResolveRelDir(root, rel)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", errTreePath, err)
+	}
+	entries, err := os.ReadDir(absDir)
 	if err != nil {
 		return nil, err
 	}
-	info, err := os.Stat(absRoot)
-	if err != nil {
-		return nil, err
-	}
-	if !info.IsDir() {
-		return nil, errors.New("root is not a directory")
-	}
-	node, _ := buildNode(absRoot, absRoot, info)
-	if node == nil {
-		node = &TreeNode{
-			Name:  filepath.Base(absRoot),
-			Path:  "",
-			IsDir: true,
+
+	children := make([]*TreeNode, 0, len(entries))
+	for _, entry := range entries {
+		// 심볼릭 링크/특수 파일은 건너뛴다.
+		entryInfo, err := entry.Info()
+		if err != nil {
+			continue
 		}
+		name := entry.Name()
+		if entryInfo.IsDir() {
+			if excludedDirs[name] {
+				continue
+			}
+			children = append(children, &TreeNode{Name: name, Path: joinRel(rel, name), IsDir: true})
+			continue
+		}
+		if !entryInfo.Mode().IsRegular() || !IsViewablePath(name) {
+			continue
+		}
+		children = append(children, &TreeNode{Name: name, Path: joinRel(rel, name), IsDir: false})
 	}
-	return node, nil
+	sortNodes(children)
+
+	displayName := filepath.Base(absDir)
+	return &TreeNode{
+		Name:     displayName,
+		Path:     rel,
+		IsDir:    true,
+		Children: children,
+	}, nil
 }
 
-// buildNode는 주어진 경로의 노드를 재귀적으로 구성한다.
-// 자손에 뷰어 대상 파일이 하나도 없으면 nil을 반환하여 상위에서 배제되도록 한다.
-func buildNode(root, path string, info os.FileInfo) (*TreeNode, bool) {
-	rel := relPath(root, path)
-	name := info.Name()
-
-	if info.IsDir() {
-		if rel != "" && excludedDirs[name] {
-			return nil, false
-		}
-		entries, err := os.ReadDir(path)
-		if err != nil {
-			return nil, false
-		}
-		children := make([]*TreeNode, 0, len(entries))
-		hasViewable := false
-		for _, entry := range entries {
-			// 심볼릭 링크/특수 파일은 건너뛴다.
-			entryInfo, err := entry.Info()
-			if err != nil {
-				continue
-			}
-			if !entryInfo.IsDir() && !entryInfo.Mode().IsRegular() {
-				continue
-			}
-			childPath := filepath.Join(path, entry.Name())
-			child, childHasViewable := buildNode(root, childPath, entryInfo)
-			if child != nil {
-				children = append(children, child)
-				if childHasViewable {
-					hasViewable = true
-				}
-			}
-		}
-		// 루트는 항상 노출. 그 외에는 뷰어 대상 파일이 포함된 디렉토리만 유지한다.
-		if rel == "" || hasViewable {
-			sortNodes(children)
-			displayName := name
-			if rel == "" {
-				displayName = filepath.Base(root)
-			}
-			return &TreeNode{
-				Name:     displayName,
-				Path:     rel,
-				IsDir:    true,
-				Children: children,
-			}, hasViewable
-		}
-		return nil, false
+// joinRel은 슬래시 구분 상대 경로에 하위 이름을 잇는다.
+func joinRel(rel, name string) string {
+	if rel == "" {
+		return name
 	}
-
-	// 파일
-	if !IsViewablePath(name) {
-		return nil, false
-	}
-	return &TreeNode{
-		Name:  name,
-		Path:  rel,
-		IsDir: false,
-	}, true
+	return rel + "/" + name
 }
 
 // sortNodes는 디렉토리를 먼저, 파일을 뒤로 정렬한다. 같은 종류끼리는 이름순이다.
@@ -162,6 +132,48 @@ func ResolveRelPath(root, rel string) (string, error) {
 		return "", errors.New("path is a directory")
 	}
 	return candidate, nil
+}
+
+// ResolveRelDir는 클라이언트가 요청한 상대 디렉토리 경로를 검증하고 절대 경로로 변환한다.
+// 빈 문자열은 루트를 뜻한다. 루트 밖 경로, 배제 디렉토리를 지나는 경로, 일반 파일은 거부한다.
+func ResolveRelDir(root, rel string) (string, error) {
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return "", err
+	}
+	candidate := absRoot
+	if rel != "" {
+		candidate = filepath.Clean(filepath.Join(absRoot, filepath.FromSlash(rel)))
+		rootWithSep := absRoot + string(filepath.Separator)
+		if candidate != absRoot && !strings.HasPrefix(candidate, rootWithSep) {
+			return "", errors.New("path escapes root")
+		}
+		if containsExcludedDir(absRoot, candidate) {
+			return "", errors.New("directory not allowed")
+		}
+	}
+	info, err := os.Stat(candidate)
+	if err != nil {
+		return "", err
+	}
+	if !info.IsDir() {
+		return "", errors.New("path is not a directory")
+	}
+	return candidate, nil
+}
+
+// containsExcludedDir는 root 기준 상대 경로의 구성요소 중 배제 디렉토리가 있는지 확인한다.
+func containsExcludedDir(absRoot, candidate string) bool {
+	rel := relPath(absRoot, candidate)
+	if rel == "" {
+		return false
+	}
+	for _, part := range strings.Split(rel, "/") {
+		if excludedDirs[part] {
+			return true
+		}
+	}
+	return false
 }
 
 // IsExcludedDir는 해당 이름이 트리 스캔에서 배제되는 디렉토리인지 반환한다.

@@ -1,6 +1,7 @@
 package mdview
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -52,6 +53,9 @@ func TestResolveOpenAIKey(t *testing.T) {
 	_, err = ResolveOpenAIKey()
 	if err == nil || !strings.Contains(err.Error(), configFileName) {
 		t.Errorf("키 부재 에러에 설정 파일 안내가 없음: %v", err)
+	}
+	if !errors.Is(err, ErrNoOpenAIKey) || !strings.HasPrefix(err.Error(), "OpenAI API 키가 없습니다. ") {
+		t.Errorf("키 부재 에러가 ErrNoOpenAIKey를 감싸지 않거나 문구가 바뀜: %v", err)
 	}
 }
 
@@ -149,7 +153,7 @@ func TestTranscribeRecordingViaAPI(t *testing.T) {
 	t.Setenv(openaiKeyEnv, "test-key")
 
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "audio.webm"), []byte("FAKEAUDIO"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "audio.webm"), append([]byte{0x1A, 0x45, 0xDF, 0xA3}, "FAKEAUDIO"...), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	eventsJSON := `{"version":1,"mode":"folder","root":"/proj","durationMs":8500,"audio":"audio.webm","events":[` +

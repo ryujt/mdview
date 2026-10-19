@@ -58,6 +58,7 @@ const EXT_LANGUAGES = {
   mod: 'plaintext',
   sum: 'plaintext',
   lock: 'plaintext',
+  txt: 'plaintext',
 };
 
 const NAME_LANGUAGES = {

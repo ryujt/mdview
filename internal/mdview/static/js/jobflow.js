@@ -102,6 +102,7 @@ const JobFlowToSVG = {
     const edges = [];
     const lastPosByKey = new Map();
     const shapesByKey = new Map();
+    // 화살표를 이미 내보낸 셀(도형 객체). 이 셀의 다음 화살표는 팬아웃 — 키가 아닌 셀 단위라 같은 키가 새 셀로 다시 그려지면 첫 화살표는 같은 행부터 시도한다
     const usedAsSource = new Set();
     let prevTo = null;
     const ensureRow = (r) => {
@@ -134,6 +135,13 @@ const JobFlowToSVG = {
       for (let e = a; e < b; e++) if (colEdges[col][e]) return true;
       return false;
     };
+    // 키가 다른 도형이 있거나, 비어 있어도 위 행에서 세로선이 들어오거나 가로선이 양옆으로 관통하면 막힌 칸(같은 키 도형은 그대로 쓴다)
+    const isCellBlocked = (row, col, key) => {
+      const cell = grid[row] && grid[row].cells[col];
+      if (cell) return cell.key !== key;
+      if (row > 0 && colEdges[col] && colEdges[col][row - 1]) return true;
+      return !!(col > 0 && rowEdges[row] && rowEdges[row][col - 1] && rowEdges[row][col]);
+    };
     const markHorizontal = (row, c1, c2) => {
       const a = Math.min(c1, c2);
       const b = Math.max(c1, c2);
@@ -163,7 +171,7 @@ const JobFlowToSVG = {
         const toType = this.getShapeType(rel.toAction);
         let canUseBentArrow = false;
         let existingFromShape = null;
-        if (shapesByKey.has(fromKey) && usedAsSource.has(fromKey) && fromCol !== toCol) {
+        if (shapesByKey.has(fromKey) && usedAsSource.has(shapesByKey.get(fromKey)) && fromCol !== toCol) {
           existingFromShape = shapesByKey.get(fromKey);
           let hasInterveningShapes = false;
           for (let r = existingFromShape.row + 1; r < grid.length; r++) {
@@ -192,7 +200,7 @@ const JobFlowToSVG = {
           const bentCount = bentArrowCount.get(fromKey) || 0;
           bentArrowCount.set(fromKey, bentCount + 1);
           edges.push({ from: existingFromShape, to: toShape, bent: true, bentIndex: bentCount });
-          usedAsSource.add(fromKey);
+          usedAsSource.add(existingFromShape);
           markHorizontal(toRow, fromCol, toCol);
           if (toRow > existingFromShape.row) markVertical(fromCol, existingFromShape.row, toRow);
           if (toType !== "") lastPosByKey.set(toKey, { row: toRow, col: toCol });
@@ -236,7 +244,7 @@ const JobFlowToSVG = {
             const toShape = toType !== "" ? placeShapeIfAbsent(toKey, toText, toType, toCol, toRow) : { col: toCol, row: toRow, dummy: true };
             if (toType !== "") shapesByKey.set(toKey, toShape);
             edges.push({ from: fromShape, to: toShape, bent: false });
-            usedAsSource.add(fromKey);
+            usedAsSource.add(fromShape);
             if (fromCol === toCol) {
               markVertical(fromCol, fromRow, toRow);
             } else {
@@ -262,6 +270,7 @@ const JobFlowToSVG = {
               if (rel.from === rel.to) ensureRow(toRow);
               if (fromCol === toCol) { crossing = isVerticalCrossing(fromCol, fromRow, toRow); }
               else { crossing = isHorizontalCrossing(fromRow, fromCol, toCol); }
+              if (!crossing && toType !== "") crossing = isCellBlocked(toRow, toCol, toKey);
               if (crossing) { fromRow = triedReuse ? grid.length : fromRow + 1; triedReuse = false; toRow = rel.from === rel.to ? fromRow + 1 : fromRow; }
             }
             fromShape = placeShapeIfAbsent(fromKey, fromText, fromType, fromCol, fromRow);
@@ -269,7 +278,7 @@ const JobFlowToSVG = {
             const toShape = toType !== "" ? placeShapeIfAbsent(toKey, toText, toType, toCol, toRow) : { col: toCol, row: toRow, dummy: true };
             if (toType !== "") shapesByKey.set(toKey, toShape);
             edges.push({ from: fromShape, to: toShape, bent: false });
-            usedAsSource.add(fromKey);
+            usedAsSource.add(fromShape);
             if (fromCol === toCol) markVertical(fromCol, fromRow, toRow); else markHorizontal(fromRow, fromCol, toCol);
             if (toType !== "") lastPosByKey.set(toKey, { row: toRow, col: toCol });
             prevTo = toType !== "" ? { key: toKey, row: toRow, col: toCol } : null;

@@ -127,20 +127,25 @@ func buildRecordingForm(t *testing.T, audioContent, audioMime, meta string) (*by
 }
 
 func TestHandleRecordingFolderMode(t *testing.T) {
+	t.Setenv(openaiKeyEnv, "")
+	t.Setenv("HOME", t.TempDir())
 	root := t.TempDir()
 	server, err := NewFolderServer(NewHub(), root)
 	if err != nil {
 		t.Fatalf("NewFolderServer error: %v", err)
 	}
 	ts := httptest.NewServer(server.Handler())
-	defer ts.Close()
+	defer func() {
+		server.WaitPipelines()
+		ts.Close()
+	}()
 
 	meta := `{"version":1,"mode":"folder","durationMs":1234,"events":[{"t":0,"type":"open","file":"README.md"}]}`
 	body, contentType := buildRecordingForm(t, "AUDIOBYTES", "audio/webm;codecs=opus", meta)
 
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+apiRecordingPath, body)
 	req.Header.Set("Content-Type", contentType)
-	req.Header.Set("Origin", "http://localhost:1234")
+	req.Header.Set("Origin", ts.URL)
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request error: %v", err)
@@ -184,6 +189,8 @@ func TestHandleRecordingFolderMode(t *testing.T) {
 }
 
 func TestHandleRecordingFileMode(t *testing.T) {
+	t.Setenv(openaiKeyEnv, "")
+	t.Setenv("HOME", t.TempDir())
 	dir := t.TempDir()
 	workDir := t.TempDir()
 	target := filepath.Join(dir, "doc.md")
@@ -195,7 +202,10 @@ func TestHandleRecordingFileMode(t *testing.T) {
 		t.Fatalf("NewFileServer error: %v", err)
 	}
 	ts := httptest.NewServer(server.Handler())
-	defer ts.Close()
+	defer func() {
+		server.WaitPipelines()
+		ts.Close()
+	}()
 
 	body, contentType := buildRecordingForm(t, "X", "audio/mp4", `{"mode":"file"}`)
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+apiRecordingPath, body)
@@ -238,13 +248,18 @@ func TestRecordingBaseDirFileModeFallback(t *testing.T) {
 }
 
 func TestHandleRecordingRejections(t *testing.T) {
+	t.Setenv(openaiKeyEnv, "")
+	t.Setenv("HOME", t.TempDir())
 	root := t.TempDir()
 	server, err := NewFolderServer(NewHub(), root)
 	if err != nil {
 		t.Fatalf("NewFolderServer error: %v", err)
 	}
 	ts := httptest.NewServer(server.Handler())
-	defer ts.Close()
+	defer func() {
+		server.WaitPipelines()
+		ts.Close()
+	}()
 
 	// GET 요청 거부
 	res, err := http.Get(ts.URL + apiRecordingPath)
@@ -268,6 +283,20 @@ func TestHandleRecordingRejections(t *testing.T) {
 	res.Body.Close()
 	if res.StatusCode != http.StatusForbidden {
 		t.Errorf("cross-origin status = %d, want 403", res.StatusCode)
+	}
+
+	// 같은 호스트의 다른 포트(전용 Chrome의 개발 서버 등)에서 온 업로드 거부
+	body, contentType = buildRecordingForm(t, "X", "audio/webm", `{}`)
+	req, _ = http.NewRequest(http.MethodPost, ts.URL+apiRecordingPath, body)
+	req.Header.Set("Content-Type", contentType)
+	req.Header.Set("Origin", "http://localhost:3000")
+	res, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("other-port request error: %v", err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusForbidden {
+		t.Errorf("other-port status = %d, want 403", res.StatusCode)
 	}
 
 	// meta가 JSON 객체가 아니면 거부 (배열, null 모두)

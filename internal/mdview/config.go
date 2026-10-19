@@ -2,6 +2,7 @@ package mdview
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,19 +16,31 @@ const (
 	openaiKeyEnv = "OPENAI_API_KEY"
 )
 
+// ErrNoOpenAIKey는 환경변수와 설정 파일 어디에도 OpenAI API 키가 없을 때 ResolveOpenAIKey가 감싸서 돌려주는 오류다.
+var ErrNoOpenAIKey = errors.New("OpenAI API 키가 없습니다")
+
 // Config는 mdview의 사용자 설정이다.
 type Config struct {
 	// OpenAIAPIKey는 전사(whisper-1) API 호출에 사용하는 키이다.
 	OpenAIAPIKey string `json:"openai_api_key"`
 }
 
-// ConfigPath는 설정 파일 경로를 반환한다.
-func ConfigPath() (string, error) {
+// ConfigDir은 mdview 설정 디렉토리(~/.config/mdview)를 반환한다. Chrome 전용 프로필도 이 아래에 둔다.
+func ConfigDir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("홈 디렉토리를 찾을 수 없습니다: %w", err)
 	}
-	return filepath.Join(home, ".config", configDirName, configFileName), nil
+	return filepath.Join(home, ".config", configDirName), nil
+}
+
+// ConfigPath는 설정 파일 경로를 반환한다.
+func ConfigPath() (string, error) {
+	dir, err := ConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, configFileName), nil
 }
 
 // LoadConfig는 설정 파일을 읽는다. 파일이 없으면 빈 설정을 반환한다.
@@ -64,6 +77,6 @@ func ResolveOpenAIKey() (string, error) {
 	}
 	path, _ := ConfigPath()
 	return "", fmt.Errorf(
-		"OpenAI API 키가 없습니다. %s 환경변수를 설정하거나 설정 파일을 작성하세요:\n  %s\n  {\"openai_api_key\": \"sk-...\"}",
-		openaiKeyEnv, path)
+		"%w. %s 환경변수를 설정하거나 설정 파일을 작성하세요:\n  %s\n  {\"openai_api_key\": \"sk-...\"}",
+		ErrNoOpenAIKey, openaiKeyEnv, path)
 }

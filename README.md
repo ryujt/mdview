@@ -6,18 +6,24 @@
 ## 기능
 
 - **파일 모드** (`mdview <file>`): 지정한 파일을 브라우저로 열고, 파일 변경을 실시간 반영합니다. 마크다운은 렌더링되고, 소스코드·설정 파일은 코드뷰어로 표시됩니다.
-- **폴더 모드** (`mdview`): 현재 디렉토리를 기준으로 왼쪽 사이드바에 프로젝트 파일 트리를 표시합니다. 마크다운(`.md`) 외에 소스코드(`.go`, `.js`, `.py` 등)와 설정 파일(YAML, JSON, `.env`, `Dockerfile` 등)도 함께 표시됩니다. 파일을 클릭하면 메인 영역에 표시되며, 선택된 파일이 변경되면 자동으로 다시 렌더링됩니다.
-- 마크다운 파일은 렌더링된 화면으로, 소스코드/설정 파일은 syntax highlighting과 라인 번호가 있는 코드뷰어로 표시됩니다.
+- **폴더 모드** (`mdview`): 현재 디렉토리를 기준으로 왼쪽 사이드바에 프로젝트 파일 트리를 표시합니다. 마크다운(`.md`) 외에 텍스트(`.txt`), PDF(`.pdf`), 소스코드(`.go`, `.js`, `.py` 등)와 설정 파일(YAML, JSON, `.env`, `Dockerfile` 등)도 함께 표시됩니다. 파일을 클릭하면 메인 영역에 표시되며, 선택된 파일이 변경되면 자동으로 다시 렌더링됩니다.
+  - 트리는 폴더를 펼칠 때마다 해당 디렉토리 1레벨만 조회합니다 (대형 프로젝트에서도 초기 로딩이 가볍고, 다시 펼치면 목록이 갱신됩니다).
+  - 활성 파일을 다시 클릭하면 선택이 해제되어 초기 화면으로 돌아갑니다.
+  - 문서마다 스크롤 위치를 기억해, 다시 열면 보던 위치로 이동합니다 (처음 여는 문서는 맨 위).
+- 마크다운 파일은 렌더링된 화면으로, 소스코드/설정 파일은 syntax highlighting과 라인 번호가 있는 코드뷰어로 표시됩니다. PDF는 텍스트 선택이 가능한 내장 PDF 뷰어(pdf.js)로 표시됩니다.
 - 표준 마크다운 (GFM) + 코드 블록 syntax highlighting + 복사 버튼
 - 커스텀 다이어그램: `mermaid`, `state`, `navigation`, `layout`, `jobflow`
 - **오디오 녹화**: 상단 툴바의 녹화 버튼으로 문서/코드를 보며 음성 설명을 녹음하고, 녹음 중 참조한 위치(파일 열람·텍스트 복사·라인 클릭)를 오디오 시간축에 맞춰 JSON으로 기록합니다. 입력 장치(마이크)를 드롭다운으로 선택할 수 있고, 녹음 중 입력 레벨이 표시됩니다.
+- **웹 페이지 함께 녹화**: 툴바에 URL을 넣고 「웹 열기」를 누르면 전용 프로필의 Chrome 창이 그 사이트를 엽니다. 녹음 중 그 창에서 한 클릭·더블클릭·복사가 요소 정보(CSS 경로, 태그, 텍스트, 상위 제목, 주변 텍스트)와 함께 문서 이벤트와 **같은 타임라인**에 기록됩니다. Chrome이 필요합니다(`MDVIEW_CHROME_PATH`로 경로 지정 가능).
+- **프롬프트 생성**: 녹화 저장 후 발화와 문서·웹 조작을 시간순 텍스트로 정리한 `prompt.txt`가 항상 만들어집니다(API 키가 없으면 조작 기록만으로). 완료 토스트의 「prompt.txt 열기」로 바로 볼 수 있고, 그 내용을 AI에게 붙여 넣으면 됩니다.
 - **전사**: 녹화 저장 시 OpenAI `whisper-1` API로 **자동 전사**되어(API 키 필요) 발화 세그먼트 타임스탬프와 참조 이벤트를 병합한 `transcript.json` 문서가 생성됩니다. 어느 시점에 어느 라인을 가리키고 어떤 텍스트를 복사했는지 발화와 함께 확인할 수 있습니다. 진행 상태는 툴바 칩으로 표시되고, 완료 시 뷰어에서 바로 열 수 있습니다. 수동 실행은 `mdview transcribe`.
 - **상세 로깅**: `DEBUG_MODE`/`LOG_TO_FILE` 환경변수로 2계층 로깅(텍스트 로그 + 카테고리별 상세 아티팩트 + 세션 프로세스 다이어그램)을 켤 수 있습니다.
 
 ## 빌드 및 설치
 
 ```bash
-cd cli/mdview
+git clone git@github.com:ryujt/mdview.git
+cd mdview
 ./install.sh                # test + vet + build + ~/.local/bin 설치 + 설정 복사
 ./install.sh --build-only   # 빌드까지만
 PREFIX=/usr/local ./install.sh   # 설치 경로 변경 ($PREFIX/bin)
@@ -91,9 +97,12 @@ AI나 동료에게 전달하기 위한 기능입니다.
    - **copy**: 텍스트 선택 후 `Ctrl+C`(⌘C) 또는 복사 버튼 사용 — 파일 내 라인 번호와 소스 기준 텍스트 저장 (마크다운은 렌더링 결과가 아닌 마크다운 코드 기준)
    - **focus**: 본문 클릭 — 클릭한 라인(코드뷰어) 또는 블록(마크다운)이 하이라이트되고 라인 번호가 저장됨
    - **word**: 본문 더블클릭 — 선택된 텍스트(단어)가 저장됨. 여백 등을 더블클릭해 선택된 텍스트가 없으면 클릭 위치 뒤의 첫 단어를 찾아 저장하고 그 단어를 선택 상태로 표시
+   - PDF 문서에서는 라인 대신 `pdf` 필드가 기록됩니다 — 클릭(focus)은 페이지 번호와 페이지 좌상단 기준 0~1 정규화 좌표(`page`, `x`, `y`) 및 클릭 지점 주변 텍스트, 텍스트 선택 복사(copy)와 더블클릭(word)은 페이지 번호와 선택 문자열
+   - **web-open / web-click / web-dblclick / web-copy**: 「웹 열기」로 연 Chrome 창에서의 조작 — `url`, `title`, `selector`, `tag`, `id`, `classes`, `text`, `heading`, `context`, `selection`
 3. 버튼을 다시 누르면 저장됩니다: `mdview-recordings/rec-<timestamp>/` (mdview를 실행한 터미널의 현재 디렉토리 기준)
    - `audio.webm` (브라우저에 따라 `.m4a`/`.ogg`) — 녹음 오디오
    - `events.json` — 이벤트 타임라인
+   - `prompt.txt` — 발화·조작 타임라인 텍스트 (AI에게 붙여 넣는 용도, 항상 생성)
 
 `events.json` 예시:
 
@@ -110,7 +119,12 @@ AI나 동료에게 전달하기 위한 기능입니다.
     { "t": 0, "type": "open", "file": "docs/guide.md" },
     { "t": 5200, "type": "focus", "file": "docs/guide.md", "line": 42, "lineEnd": 45, "text": "..." },
     { "t": 7300, "type": "word", "file": "docs/guide.md", "line": 43, "lineEnd": 43, "text": "오케스트레이터" },
-    { "t": 9100, "type": "copy", "file": "main.go", "line": 10, "lineEnd": 14, "text": "<소스 라인>", "selection": "<복사된 문자열>" }
+    { "t": 9100, "type": "copy", "file": "main.go", "line": 10, "lineEnd": 14, "text": "<소스 라인>", "selection": "<복사된 문자열>" },
+    { "t": 12000, "type": "open", "file": "docs/spec.pdf" },
+    { "t": 13500, "type": "focus", "file": "docs/spec.pdf", "pdf": { "page": 2, "x": 0.41, "y": 0.27 } },
+    { "t": 15000, "type": "copy", "file": "docs/spec.pdf", "pdf": { "page": 2 }, "selection": "<복사된 문자열>" },
+    { "t": 16000, "type": "web-open", "url": "https://example.com/dashboard" },
+    { "t": 18200, "type": "web-click", "url": "https://example.com/dashboard?tab=metrics", "selector": "main > span.metric-value", "tag": "span", "classes": "metric-value", "text": "12,345", "heading": "핵심 지표", "context": "핵심 지표 월간 활성 사용자 12,345" }
   ]
 }
 ```
@@ -127,13 +141,36 @@ SmartMD 전처리로 라인 번호가 원본과 어긋나는 블록은 원본 �
 3. macOS: 시스템 설정 → 개인정보 보호 및 보안 → **마이크**에서 사용 중인 브라우저(Chrome/Safari 등)를 켜고 브라우저를 재시작.
 4. 권한이 차단된 상태거나 장치가 없으면 녹화 버튼을 눌렀을 때 원인별 안내 토스트가 표시됩니다.
 
+### 웹 페이지 함께 녹화
+
+1. 툴바의 입력창에 URL을 넣고 「웹 열기」(또는 Enter). scheme을 생략하면 `localhost`·`127.0.0.1` 같은 로컬 호스트는 `http://`, 그 밖의 호스트는 `https://`가 붙습니다.
+2. 전용 프로필(`~/.config/mdview/chrome-profile`)의 Chrome 창이 열립니다. 로그인이 필요한 사이트는 이 프로필에서 한 번 로그인하면 유지됩니다.
+3. 녹음 중 그 창(새 탭·팝업 포함)에서의 클릭·더블클릭·복사가 기록됩니다. 툴바 칩에 `이벤트 N · 웹 M`으로 수집 수가 보입니다.
+4. 같은 세션에서 다시 「웹 열기」를 누르면 새 탭으로 열립니다. Chrome 창을 모두 닫으면 다음 「웹 열기」에서 다시 기동합니다. mdview를 끝내면 Chrome도 함께 닫힙니다.
+
+알려진 제한 (webview와 동일한 항목 포함):
+- 교차 출처 iframe 내부의 조작은 기록되지 않습니다.
+- `navigator.clipboard.writeText()`를 쓰는 복사 버튼은 `copy`가 아니라 그 버튼의 `click`으로만 기록됩니다.
+- 새 탭이 열린 직후 스크립트 주입 전까지 짧은 유실 구간이 있습니다.
+- 이 프로필로 로그인한 세션은 DevTools 포트를 통해 로컬의 다른 프로세스가 접근할 수 있습니다. 민감한 계정 로그인은 피하세요.
+- 전용 Chrome은 `--use-mock-keychain`으로 실행되어 macOS 키체인("Chrome Safe Storage")에 접근하지 않습니다. 키체인 암호 프롬프트가 뜨지 않는 대신, 이 프로필의 쿠키는 고정 키로 암호화됩니다 (민감 계정을 피하라는 위 권고와 같은 맥락).
+- 입력란 값·비밀번호 주변 텍스트·클릭 좌표·스크린샷은 수집하지 않습니다.
+- Origin 검증은 호스트:포트 동일성으로 하므로 다른 포트의 로컬 페이지는 mdview API를 호출할 수 없습니다.
+- 동시 녹음은 mdview 프로세스당 하나입니다.
+
+실제 Chrome으로 웹 열기 → 클릭 수집 → 업로드 병합 → `prompt.txt`까지 확인하는 E2E 테스트가 있습니다 (Chrome 창이 화면에 뜹니다):
+
+```bash
+MDVIEW_E2E_CHROME=1 go test ./internal/mdview/ -run TestWebCaptureEndToEnd
+```
+
 ### 전사 (음성 → 텍스트)
 
-**자동 전사**: API 키가 설정되어 있으면 녹화 저장 직후 서버가 백그라운드에서 자동으로 전사합니다.
-툴바에 "전사 중" 칩이 표시되고, 완료되면 토스트의 **열기** 버튼으로 `transcript.md`를 바로 볼 수 있습니다.
-(키가 없거나 오디오가 25MB를 넘으면 자동 전사가 생략되고 수동 명령이 안내됩니다. 상태 API: `GET /api/recording/status`)
+**자동 후처리**: 녹화 저장 직후 서버가 백그라운드에서 전사(API 키가 있고 25MB 이하일 때)와 `prompt.txt` 생성을 진행합니다.
+툴바에 "후처리 중" 칩이 표시되고, 완료되면 토스트의 「prompt.txt 열기」로 바로 볼 수 있습니다.
+(키가 없거나 오디오가 25MB를 넘으면 전사만 생략되고 `prompt.txt`는 조작 기록만으로 만들어집니다. 상태 API: `GET /api/recording/status`)
 
-수동 실행:
+수동 실행 (`mdview transcribe`는 전사 여부와 무관하게 `prompt.txt`도 다시 만듭니다):
 
 ```bash
 mdview transcribe mdview-recordings/rec-20260718-230000
@@ -201,8 +238,10 @@ logs/
 ## 프로젝트 구조
 
 ```
-cli/mdview/
+mdview/
   install.sh                 # 빌드 및 설치 스크립트
+  build-pkg.sh               # macOS .pkg 인스톨러 빌드 (universal, 서명·공증)
+  test/                      # 프론트엔드 단위 테스트 (node --test)
   cmd/
     main.go                  # Orchestrator (CLI, 서브커맨드, 와이어링)
   internal/
@@ -216,6 +255,14 @@ cli/mdview/
       recording.go           # 녹화(오디오+이벤트) 저장 Worker
       transcribe.go          # 전사(whisper-1 API/로컬 CLI) 및 transcript.md 생성 Orchestrator
       config.go              # 사용자 설정 (~/.config/mdview/config.json)
+      websession.go          # 웹 조작 이벤트 검증·버퍼 Service
+      webopen.go             # URL 검증 + 전용 Chrome 수명 소유
+      webbrowser.go          # 전용 프로필 Chrome 기동·탭 열기 Gateway
+      webcapture.go          # 타깃 추적 + 격리 월드 주입 + 이벤트 수신 Worker
+      chrome.go              # Chrome 실행 파일 탐색
+      pipeline.go            # 저장 → 전사(가능 시) → prompt.txt Sub-Orchestrator
+      prompt.go              # prompt.txt 생성 (순수 함수)
+      inject/capture.js      # 대상 페이지에 주입되는 조작 수집 스크립트
       logging/               # 2계층 로깅 (Logger 싱글톤 + Mermaid 렌더러)
         logger.go
         process_event.go
@@ -225,6 +272,8 @@ cli/mdview/
         css/
         js/
           recorder.js        # 녹음 + 이벤트 타임라인 기록 Worker
+          webopen.js         # 툴바 「웹 열기」 Worker
+          web-url.js         # URL 정규화
           ...
 ```
 
@@ -236,5 +285,6 @@ cli/mdview/
 
 ## 요구사항
 
-- Go 1.24 이상
+- Go 1.26 이상 (go.mod의 `go 1.26`, cdproto 요구사항. 로컬 Go가 더 낮으면 `GOTOOLCHAIN=auto`로 첫 빌드 시 자동 다운로드)
+- 웹 페이지 녹화를 쓰려면 Google Chrome 또는 Chromium (`MDVIEW_CHROME_PATH`로 경로 지정 가능). 없어도 나머지 기능은 동작
 - macOS / Linux / Windows

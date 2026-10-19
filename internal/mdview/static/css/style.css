@@ -250,6 +250,53 @@ body.resizing-sidebar iframe {
   cursor: default;
 }
 
+/* 웹 페이지 열기 (전용 Chrome 창) */
+#web-url {
+  width: 220px;
+  height: 28px;
+  padding: 0 8px;
+  font: inherit;
+  font-size: 12px;
+  color: #24292e;
+  background: #ffffff;
+  border: 1px solid #e1e4e8;
+  border-radius: 6px;
+}
+
+#web-url:focus {
+  outline: none;
+  border-color: #0366d6;
+  box-shadow: 0 0 0 2px rgba(3, 102, 214, 0.2);
+}
+
+#web-open {
+  height: 28px;
+  padding: 0 10px;
+  font: inherit;
+  font-size: 12px;
+  color: #24292e;
+  background: #ffffff;
+  border: 1px solid #e1e4e8;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+#web-open:hover {
+  background: #f3f4f6;
+  border-color: #0366d6;
+}
+
+#web-open:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+@media (max-width: 768px) {
+  #web-url { width: 140px; }
+}
+
 /* 백그라운드 작업(업로드/전사) 상태 칩 */
 #job-status {
   display: inline-flex;
@@ -300,6 +347,12 @@ body.resizing-sidebar iframe {
 #record-button:hover {
   background: #f3f4f6;
   border-color: #d73a49;
+}
+
+/* 이전 녹화 업로드 중에는 새 녹음을 시작할 수 없다 (서버 웹 이벤트 버퍼 보호) */
+#record-button:disabled {
+  opacity: 0.55;
+  cursor: default;
 }
 
 #record-button .rec-icon {
@@ -742,4 +795,75 @@ main {
   border-radius: 0;
   font-size: 100%;
   white-space: pre;
+}
+
+/* PDF 뷰어: 페이지별 캔버스 + 텍스트 선택용 투명 텍스트 레이어 */
+#preview .pdf-viewer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 0 24px;
+}
+
+#preview .pdf-page {
+  position: relative;
+  background: #ffffff;
+  border: 1px solid #e1e4e8;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+}
+
+#preview .pdf-page canvas {
+  display: block;
+}
+
+/* 아직 렌더되지 않은 페이지 자리표시자 (뷰포트 근접 시 렌더됨) */
+#preview .pdf-page.pdf-page-pending {
+  background: #f6f8fa;
+}
+
+#preview .pdf-text-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  line-height: 1;
+  transform-origin: 0 0;
+  -webkit-text-size-adjust: none;
+  caret-color: transparent;
+}
+
+#preview .pdf-text-layer span,
+#preview .pdf-text-layer br {
+  position: absolute;
+  color: transparent;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0 0;
+}
+
+#preview .pdf-text-layer ::selection {
+  background: rgba(3, 102, 214, 0.3);
+}
+
+/* 녹화 중 클릭 포커스 표시: PDF 페이지 내 클릭 지점 */
+#preview .pdf-focus-point {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border-radius: 50%;
+  background: rgba(249, 197, 19, 0.55);
+  box-shadow: 0 0 0 4px rgba(249, 197, 19, 0.25);
+  pointer-events: none;
+  z-index: 3;
+}
+
+#preview .pdf-loading,
+#preview .pdf-error {
+  padding: 24px 16px;
+  color: #6a737d;
+}
+
+#preview .pdf-error {
+  color: #dc3545;
 }

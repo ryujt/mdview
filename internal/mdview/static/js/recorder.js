@@ -13,9 +13,16 @@
 //   - 코드뷰어: 파일의 실제 라인 번호 (클릭 좌표/선택 영역에서 계산)
 //   - 마크다운: 블록 단위 라인 범위. SmartMD 전처리로 라인이 어긋난 경우
 //     원본 텍스트에서 동일 슬라이스를 탐색해 보정하고, 실패하면 approx로 표시한다.
+//   - PDF: 라인 대신 pdf 필드에 페이지 번호와 페이지 좌상단 기준
+//     0~1 정규화 클릭 좌표(x, y)를 기록한다 (선택/복사는 페이지 번호만).
 
 const API_RECORDING_PATH = '/api/recording';
 const API_RECORDING_STATUS_PATH = '/api/recording/status';
+const API_WEB_START_PATH = '/api/web/start';
+const API_WEB_STOP_PATH = '/api/web/stop';
+const API_WEB_LIVE_PATH = '/api/web/live';
+const WEB_LIVE_POLL_MS = 1000;
+const WEB_API_TIMEOUT_MS = 3000;
 const STATUS_POLL_MS = 2000;
 const STATUS_POLL_MAX_MS = 10 * 60 * 1000;
 const JOB_DONE_HIDE_MS = 8000;
@@ -26,6 +33,8 @@ const ERROR_TEXT_LIMIT = 200;
 const AUDIO_TIMESLICE_MS = 1000;
 const TOAST_HIDE_DELAY_MS = 6000;
 const OBJECT_URL_REVOKE_DELAY_MS = 10000;
+const PDF_COORD_DECIMALS = 10000;
+const PDF_TEXT_SNAP_RADIUS_PX = 160;
 
 // 브라우저별 지원 우선순위 (Chrome/Edge: webm+opus, Safari: mp4)
 const MIME_CANDIDATES = [
@@ -54,6 +63,11 @@ let toastEl = null;
 let toastTimer = null;
 let jobTimer = null;         // 전사 상태 폴링 타이머
 let activeDeviceLabel = '';  // 현재 녹음에 사용된 입력 장치 이름
+let webPollGen = 0;        // 웹 폴링 세대 (정지 후 늦게 끝난 tick의 재예약 방지)
+let webLiveTimer = null;   // 녹음 중 웹 이벤트 수 폴링 타이머
+let webChrome = false;     // 전용 Chrome 창이 떠 있는지 (마지막 폴링 기준)
+let webEventCount = 0;     // 서버가 수집한 웹 이벤트 수 (마지막 폴링 기준)
+let uploading = false;     // 이전 녹화를 업로드하는 중인지 (새 녹음이 서버 웹 이벤트 버퍼를 지우지 않게 막는다)
 
 /**
  * 녹화 기능을 초기화한다.
@@ -150,7 +164,17 @@ export function noteFileOpen(file) {
   pushEvent({ type: 'open', file });
 }
 
+/** 툴바에서 웹 페이지를 열었을 때 호출된다 (webopen.js). 녹음 중이면 web-open 이벤트로 기록한다. */
+export function noteWebOpen(url) {
+  if (!recording || !url) return;
+  pushEvent({ type: 'web-open', url });
+}
+
 function toggleRecording() {
+  if (uploading) {
+    showToast('이전 녹화를 업로드하는 중입니다. 잠시 후 다시 시도하세요.', { error: true });
+    return;
+  }
   if (recording) stopRecording();
   else startRecording();
 }
@@ -245,7 +269,10 @@ async function startRecording() {
   events = [];
   startedAt = new Date().toISOString();
   t0 = performance.now();
+  const startEpochMs = Date.now();
   recording = true;
+  notifyWebStart(startEpochMs);
+  startWebLivePoll();
 
   mediaRecorder.addEventListener('dataavailable', (e) => {
     if (e.data && e.data.size > 0) chunks.push(e.data);
@@ -312,9 +339,10 @@ function stopRecording() {
   mediaRecorder.stop(); // → 'stop' 이벤트에서 finalizeRecording 실행
 }
 
-function finalizeRecording() {
+async function finalizeRecording() {
   const durationMs = elapsedMs();
   recording = false;
+  stopWebLivePoll();
   stopLevelMeter();
   if (mediaStream) {
     mediaStream.getTracks().forEach((t) => t.stop());
@@ -335,7 +363,14 @@ function finalizeRecording() {
     );
     return;
   }
-  uploadRecording(blob, buildMeta(durationMs));
+  // 메타는 대기 전에 확정한다. 대기 중 새 녹음이 시작되면 events·startedAt·장치가 초기화되기 때문이다.
+  // 이 선확정은 클라이언트 meta만 보호한다. 서버 웹 이벤트 버퍼는 새 녹음의 web/start가 비우므로,
+  // 정지 알림 대기부터 업로드 종료까지 녹음 버튼을 비활성화해(uploading) 새 녹음 시작을 막는다.
+  const meta = buildMeta(durationMs);
+  uploading = true;
+  ui.button.disabled = true;
+  await notifyWebStop(durationMs);
+  uploadRecording(blob, meta);
 }
 
 function buildMeta(durationMs) {
@@ -359,6 +394,8 @@ async function uploadRecording(blob, meta) {
   const form = new FormData();
   form.append('audio', blob, 'audio');
   form.append('meta', metaJson);
+  uploading = true;
+  ui.button.disabled = true;
   setJobStatus('업로드 중', { spin: true });
   try {
     const res = await fetch(API_RECORDING_PATH, { method: 'POST', body: form });
@@ -368,24 +405,84 @@ async function uploadRecording(blob, meta) {
     }
     const result = await res.json();
     lastFailed = null;
-    if (result.transcribing) {
-      setJobStatus('전사 중', { spin: true });
-      pollTranscribeStatus(result.id);
-      showToast(
-        `녹화 저장 완료 (이벤트 ${meta.events.length}개)\n${result.dir}\n` +
-          '음성→텍스트 전사가 백그라운드에서 진행 중입니다 (완료 시 알림)'
-      );
-    } else {
-      setJobStatus('');
-      showToast(
-        `녹화 저장 완료 (이벤트 ${meta.events.length}개)\n${result.dir}\n` +
-          `전사(음성→텍스트): mdview transcribe "${result.dir}"`
-      );
-    }
+    setJobStatus('후처리 중', { spin: true });
+    pollTranscribeStatus(result.id);
+    showToast(
+      `녹화 저장 완료 (이벤트 ${meta.events.length}개)\n${result.dir}\n` +
+        '후처리(전사·prompt.txt 생성)가 백그라운드에서 진행 중입니다 (완료 시 알림)'
+    );
   } catch (err) {
     setJobStatus('');
     lastFailed = { blob, metaJson };
     showToast(`녹화 업로드에 실패했습니다: ${err.message}`, { error: true, download: true });
+  } finally {
+    uploading = false;
+    ui.button.disabled = false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 웹 페이지 조작 수집 연동 (서버 WebSession)
+// ---------------------------------------------------------------------------
+
+/** 녹음 시작 시각(epoch ms)을 서버에 알린다. Chrome이 아직 없어도 보낸다 (세션 상태만 켜짐). */
+async function notifyWebStart(startEpochMs) {
+  try {
+    const res = await fetch(API_WEB_START_PATH, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ startEpochMs }),
+      signal: AbortSignal.timeout(WEB_API_TIMEOUT_MS),
+    });
+    if (!res.ok) console.warn('웹 수집 시작 알림 거부:', res.status, (await res.text()).slice(0, ERROR_TEXT_LIMIT));
+  } catch (err) {
+    console.warn('웹 수집 시작 알림 실패:', err);
+  }
+}
+
+/** 정지 시점을 서버에 알린다. 실패해도 업로드는 계속한다 (업로드가 수집을 멈춘다). */
+async function notifyWebStop(durationMs) {
+  try {
+    const res = await fetch(API_WEB_STOP_PATH, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ durationMs }),
+      signal: AbortSignal.timeout(WEB_API_TIMEOUT_MS),
+    });
+    if (!res.ok) console.warn('웹 수집 정지 알림 거부:', res.status, (await res.text()).slice(0, ERROR_TEXT_LIMIT));
+  } catch (err) {
+    console.warn('웹 수집 정지 알림 실패:', err);
+  }
+}
+
+/** 녹음 중 1초마다 Chrome 상태와 웹 이벤트 수를 읽어 칩을 갱신한다. */
+function startWebLivePoll() {
+  stopWebLivePoll();
+  webChrome = false;
+  webEventCount = 0;
+  const gen = ++webPollGen;
+  const tick = async () => {
+    try {
+      const res = await fetch(API_WEB_LIVE_PATH);
+      if (res.ok) {
+        const live = await res.json();
+        webChrome = Boolean(live.chrome);
+        webEventCount = Number(live.events) || 0;
+        updateEventCount();
+      }
+    } catch {
+      /* 다음 폴링에서 재시도 */
+    }
+    if (recording && gen === webPollGen) webLiveTimer = setTimeout(tick, WEB_LIVE_POLL_MS);
+  };
+  tick();
+}
+
+function stopWebLivePoll() {
+  webPollGen++;
+  if (webLiveTimer) {
+    clearTimeout(webLiveTimer);
+    webLiveTimer = null;
   }
 }
 
@@ -436,14 +533,14 @@ function pollTranscribeStatus(id) {
       /* 일시적 네트워크 오류 — 다음 폴링에서 재시도 */
     }
     if (job && job.state === 'done') {
-      setJobStatus('전사 완료', { done: true });
+      setJobStatus('후처리 완료', { done: true });
       setTimeout(() => setJobStatus(''), JOB_DONE_HIDE_MS);
       notifyTranscriptReady(job);
       return;
     }
     if (job && job.state === 'error') {
       setJobStatus('');
-      showToast(`자동 전사 실패: ${(job.error || '').slice(0, ERROR_TEXT_LIMIT)}`, { error: true });
+      showToast(`후처리 실패: ${(job.error || '').slice(0, ERROR_TEXT_LIMIT)}`, { error: true });
       return;
     }
     if (Date.now() - startedAtMs > STATUS_POLL_MAX_MS) {
@@ -455,14 +552,21 @@ function pollTranscribeStatus(id) {
   tick();
 }
 
+/** 후처리 완료 토스트. prompt.txt를 우선 열고, 전사 문서가 있으면 함께 안내한다. */
 function notifyTranscriptReady(job) {
   const state = ctx.getState();
-  if (state.mode === 'folder' && job.transcriptRel && ctx.openFile) {
-    showToast(`전사 완료: ${job.transcriptRel}`, {
-      action: { label: '열기', run: () => ctx.openFile(job.transcriptRel) },
+  const canOpen = state.mode === 'folder' && ctx.openFile;
+  const lines = [];
+  if (job.promptRel || job.prompt) lines.push(`prompt.txt 생성: ${job.promptRel || job.prompt}`);
+  if (job.transcript) lines.push(`전사 문서: ${job.transcriptRel || job.transcript}`);
+  if (job.note) lines.push(job.note);
+  const text = lines.length ? lines.join('\n') : '후처리 완료';
+  if (canOpen && job.promptRel) {
+    showToast(text, {
+      action: { label: 'prompt.txt 열기', run: () => ctx.openFile(job.promptRel) },
     });
   } else {
-    showToast(`전사 완료: ${job.transcript || ''}`);
+    showToast(text);
   }
 }
 
@@ -492,12 +596,37 @@ function handleCopy() {
   if (!ranges.some((r) => rangeIntersectsNode(r, ctx.preview))) return; // 뷰 밖 복사는 무시
 
   const selectionText = sel.toString();
+  const pdfPage = pdfPageOfRanges(ranges);
+  if (pdfPage) {
+    pushEvent({ type: 'copy', file: state.file, pdf: pdfRefOf(pdfPage), selection: selectionText });
+    return;
+  }
   const viewer = ctx.preview.querySelector('.code-viewer');
   if (viewer && ranges.some((r) => rangeIntersectsNode(r, viewer))) {
     copyFromCode(viewer, ranges, selectionText, state);
   } else {
     copyFromMarkdown(ranges, selectionText, state);
   }
+}
+
+/** 선택 영역이 PDF 텍스트 레이어와 겹치면 시작 지점이 속한 .pdf-page를 반환한다. */
+function pdfPageOfRanges(ranges) {
+  for (const r of ranges) {
+    const el = nodeElement(r.startContainer);
+    const page = el && el.closest ? el.closest('.pdf-page') : null;
+    if (page) return page;
+  }
+  return null;
+}
+
+/** .pdf-page 요소에서 이벤트에 기록할 pdf 참조를 만든다. */
+function pdfRefOf(pageEl, point) {
+  const ref = { page: Number(pageEl.dataset.pageNumber) || 1 };
+  if (point) {
+    ref.x = Math.round(point.x * PDF_COORD_DECIMALS) / PDF_COORD_DECIMALS;
+    ref.y = Math.round(point.y * PDF_COORD_DECIMALS) / PDF_COORD_DECIMALS;
+  }
+  return ref;
 }
 
 /** 다이어그램/코드 블록의 복사 버튼 클릭을 copy 이벤트로 기록한다. */
@@ -597,8 +726,52 @@ function handleClick(e) {
     focusCodeLine(viewer, e, state);
     return;
   }
+  const pdfPage = e.target.closest('.pdf-page');
+  if (pdfPage) {
+    focusPdfPoint(pdfPage, e, state);
+    return;
+  }
   const blockEl = e.target.closest('[data-block-index]');
   if (blockEl) focusMarkdownBlock(blockEl, state);
+}
+
+/**
+ * PDF 페이지 클릭: 페이지 번호와 정규화 좌표(0~1)를 기록하고 클릭 지점을 표시한다.
+ * 클릭 지점 주변의 텍스트를 함께 담아 전사 문서에서 위치를 해석할 수 있게 한다.
+ */
+function focusPdfPoint(pageEl, e, state) {
+  const rect = pageEl.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+  const x = Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1);
+  const y = Math.min(Math.max((e.clientY - rect.top) / rect.height, 0), 1);
+  markPdfPoint(pageEl, x, y);
+  const nearby = nearestPdfText(pageEl, e.clientX, e.clientY);
+  pushEvent({
+    type: 'focus',
+    file: state.file,
+    pdf: pdfRefOf(pageEl, { x, y }),
+    ...(nearby ? { text: nearby.slice(0, FOCUS_TEXT_LIMIT) } : {}),
+  });
+}
+
+/** 클릭 지점에서 가장 가까운 텍스트 레이어 스팬의 텍스트를 찾는다 (반경 제한, 없으면 null). */
+function nearestPdfText(pageEl, clientX, clientY) {
+  let best = null;
+  let bestDist = PDF_TEXT_SNAP_RADIUS_PX * PDF_TEXT_SNAP_RADIUS_PX;
+  pageEl.querySelectorAll('.pdf-text-layer span').forEach((span) => {
+    const text = (span.textContent || '').trim();
+    if (!text) return;
+    const r = span.getBoundingClientRect();
+    if (!r.width && !r.height) return;
+    const dx = Math.max(r.left - clientX, 0, clientX - r.right);
+    const dy = Math.max(r.top - clientY, 0, clientY - r.bottom);
+    const dist = dx * dx + dy * dy;
+    if (dist <= bestDist) {
+      bestDist = dist;
+      best = text;
+    }
+  });
+  return best;
 }
 
 function focusCodeLine(viewer, e, state) {
@@ -680,7 +853,8 @@ function pushWordEvent(state, text, range) {
   pushEvent({
     type: 'word',
     file: state.file,
-    ...(range ? { line: range.line, lineEnd: range.lineEnd } : {}),
+    ...(range && range.pdf ? { pdf: pdfRefOf(range.pdf) } : {}),
+    ...(range && range.line ? { line: range.line, lineEnd: range.lineEnd } : {}),
     text: text.slice(0, FOCUS_TEXT_LIMIT),
     ...(range && range.approx ? { approx: true } : {}),
   });
@@ -691,10 +865,15 @@ function nodeElement(node) {
   return node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
 }
 
-/** 텍스트 위치(node, offset)가 속한 코드 라인 또는 마크다운 블록의 라인 범위를 구한다. */
+/**
+ * 텍스트 위치(node, offset)가 속한 코드 라인 또는 마크다운 블록의 라인 범위를 구한다.
+ * PDF 텍스트 레이어 안이면 라인 대신 페이지 요소를 반환한다.
+ */
 function anchorLineRange(node, offset, state) {
   const el = nodeElement(node);
   if (!el || !el.closest) return null;
+  const pdfPage = el.closest('.pdf-page');
+  if (pdfPage) return { pdf: pdfPage };
   const viewer = el.closest('.code-viewer');
   if (viewer) {
     const content = viewer.querySelector('.code-content');
@@ -867,9 +1046,19 @@ function markCodeLine(viewer, content, line, lineHeight, paddingTop) {
   viewer.appendChild(bar);
 }
 
+function markPdfPoint(pageEl, x, y) {
+  clearFocusMarks();
+  const dot = document.createElement('div');
+  dot.className = 'pdf-focus-point';
+  dot.style.left = `${x * 100}%`;
+  dot.style.top = `${y * 100}%`;
+  pageEl.appendChild(dot);
+}
+
 function clearFocusMarks() {
   ctx.preview.querySelectorAll('.code-focus-line').forEach((el) => el.remove());
   ctx.preview.querySelectorAll('.focus-block').forEach((el) => el.classList.remove('focus-block'));
+  ctx.preview.querySelectorAll('.pdf-focus-point').forEach((el) => el.remove());
 }
 
 // ---------------------------------------------------------------------------
@@ -899,7 +1088,9 @@ function updateTimer() {
 }
 
 function updateEventCount() {
-  if (recording) ui.eventsCount.textContent = `이벤트 ${events.length}`;
+  if (!recording) return;
+  const web = webChrome || webEventCount > 0 ? ` · 웹 ${webEventCount}` : '';
+  ui.eventsCount.textContent = `이벤트 ${events.length}${web}`;
 }
 
 function formatClock(ms) {
@@ -917,7 +1108,11 @@ function handleBeforeUnload(e) {
   e.returnValue = ''; // 브라우저 기본 확인 대화상자 표시
 }
 
-function showToast(message, { error = false, download = false, action = null } = {}) {
+export function isRecording() {
+  return recording;
+}
+
+export function showToast(message, { error = false, download = false, action = null } = {}) {
   if (!toastEl) {
     toastEl = document.createElement('div');
     toastEl.id = 'record-toast';
