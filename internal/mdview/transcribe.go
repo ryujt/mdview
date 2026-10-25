@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ryujt/mdview/internal/mdview/logging"
+	"github.com/ryu/tools-camp/cli/mdview/internal/mdview/logging"
 )
 
 // 전사(오디오 → 텍스트) 관련 정책 상수.

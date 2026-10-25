@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ryujt/mdview/internal/mdview/logging"
+	"github.com/ryu/tools-camp/cli/mdview/internal/mdview/logging"
 )
 
 // 웹 이벤트 수집 정책 상수.

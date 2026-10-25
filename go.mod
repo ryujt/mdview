@@ -1,4 +1,4 @@
-module github.com/ryujt/mdview
+module github.com/ryu/tools-camp/cli/mdview
 
 go 1.26
 

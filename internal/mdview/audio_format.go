@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ryujt/mdview/internal/mdview/logging"
+	"github.com/ryu/tools-camp/cli/mdview/internal/mdview/logging"
 )
 
 // audioSniffLen은 컨테이너 판별에 읽는 선두 바이트 수이다.

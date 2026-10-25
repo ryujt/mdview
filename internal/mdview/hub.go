@@ -5,7 +5,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"github.com/ryujt/mdview/internal/mdview/logging"
+	"github.com/ryu/tools-camp/cli/mdview/internal/mdview/logging"
 )
 
 const (

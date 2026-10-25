@@ -62,7 +62,7 @@ Expected: `go: downloading go1.26…` 이 처음 한 번 나올 수 있다(GOTOO
 - [ ] **Step 2: 기존 테스트가 새 툴체인에서도 통과하는지 확인한다**
 
 Run: `go test ./... 2>&1 | tail -5`
-Expected: `ok  	github.com/ryujt/mdview/internal/mdview` (logging 패키지는 `no test files` 가능)
+Expected: `ok  	github.com/ryu/tools-camp/cli/mdview/internal/mdview` (logging 패키지는 `no test files` 가능)
 
 - [ ] **Step 3: Commit**
 
@@ -502,7 +502,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ryujt/mdview/internal/mdview/logging"
+	"github.com/ryu/tools-camp/cli/mdview/internal/mdview/logging"
 )
 
 // 웹 이벤트 수집 정책 상수.
@@ -1398,7 +1398,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/ryujt/mdview/internal/mdview/logging"
+	"github.com/ryu/tools-camp/cli/mdview/internal/mdview/logging"
 )
 
 // Pipeline은 녹음 종료 후 "저장된 녹화 → 전사(가능 시) → prompt.txt" 단계를 진행하는 Sub-Orchestrator이다.
@@ -2140,7 +2140,7 @@ import (
 	"github.com/chromedp/cdproto/target"
 	"github.com/chromedp/chromedp"
 
-	"github.com/ryujt/mdview/internal/mdview/logging"
+	"github.com/ryu/tools-camp/cli/mdview/internal/mdview/logging"
 )
 
 //go:embed inject/capture.js
@@ -2356,7 +2356,7 @@ import (
 	"github.com/chromedp/cdproto/target"
 	"github.com/chromedp/chromedp"
 
-	"github.com/ryujt/mdview/internal/mdview/logging"
+	"github.com/ryu/tools-camp/cli/mdview/internal/mdview/logging"
 )
 
 // Chrome 기동 정책 상수. 전용 프로필을 쓰는 이유: 최신 Chrome은 기본 user-data-dir에 대해
@@ -2576,7 +2576,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ryujt/mdview/internal/mdview/logging"
+	"github.com/ryu/tools-camp/cli/mdview/internal/mdview/logging"
 )
 
 // ErrInvalidWebURL은 http/https가 아니거나 호스트가 없는 URL에 반환된다.

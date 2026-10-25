@@ -12,8 +12,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ryujt/mdview/internal/mdview"
-	"github.com/ryujt/mdview/internal/mdview/logging"
+	"github.com/ryu/tools-camp/cli/mdview/internal/mdview"
+	"github.com/ryu/tools-camp/cli/mdview/internal/mdview/logging"
 )
 
 const (

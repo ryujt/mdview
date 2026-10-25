@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/ryujt/mdview/internal/mdview/logging"
+	"github.com/ryu/tools-camp/cli/mdview/internal/mdview/logging"
 )
 
 // maxJobNoteRunes는 TranscribeJob.Note(전사 실패 사유 등)의 최대 길이(rune)이다. 토스트 한 줄을 넘지 않게 한다.

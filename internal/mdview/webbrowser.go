@@ -12,7 +12,7 @@ import (
 	"github.com/chromedp/cdproto/target"
 	"github.com/chromedp/chromedp"
 
-	"github.com/ryujt/mdview/internal/mdview/logging"
+	"github.com/ryu/tools-camp/cli/mdview/internal/mdview/logging"
 )
 
 // Chrome 기동 정책 상수. 전용 프로필을 쓰는 이유: 최신 Chrome은 기본 user-data-dir에 대해

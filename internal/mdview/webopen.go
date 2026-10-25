@@ -8,7 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/ryujt/mdview/internal/mdview/logging"
+	"github.com/ryu/tools-camp/cli/mdview/internal/mdview/logging"
 )
 
 // ErrInvalidWebURL은 http/https가 아니거나 호스트가 없거나 사용자 정보(user:pw@)가 담긴 URL에 반환된다.

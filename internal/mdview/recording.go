@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ryujt/mdview/internal/mdview/logging"
+	"github.com/ryu/tools-camp/cli/mdview/internal/mdview/logging"
 )
 
 // 녹화(오디오 + 이벤트 타임라인) 저장 관련 정책 상수
