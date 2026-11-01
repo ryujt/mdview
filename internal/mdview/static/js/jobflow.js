@@ -6,8 +6,10 @@ const JobFlowToSVG = {
     const objectSet = new Set();
     const relationships = [];
     const standaloneShapes = [];
-    let masterObject = '';
+    // orchestrator:(또는 기존 master:) 헤더가 가리키는 객체. 헤더에 선언된 객체는 열 위치와 무관하게 다른 색으로 구별해 그린다
+    let orchestrator = '';
     let lineIndex = 0;
+    const headerValue = (line) => line.slice(line.indexOf(':') + 1).trim();
     const addObject = (objectName) => {
       const trimmed = objectName.trim();
       if (trimmed && !objectSet.has(trimmed)) {
@@ -16,10 +18,14 @@ const JobFlowToSVG = {
       }
     };
     lines.forEach(line => {
-      if (line.toLowerCase().startsWith("master:")) {
-        masterObject = line.split(":")[1].trim();
-      } else if (line.toLowerCase().startsWith("object:")) {
-        const objectNames = line.split(":")[1].split(',').map(obj => obj.trim()).filter(Boolean);
+      const header = line.match(/^\s*(orchestrator|master|scope)\s*:/i);
+      if (header && header[1].toLowerCase() !== 'scope') {
+        orchestrator = headerValue(line);
+      } else if (header) {
+        // scope 헤더는 경계 이름이라 객체가 아니다. 값에 점이 있어도 도형으로 읽지 않는다
+      } else if (/^\s*object\s*:/i.test(line)) {
+        // 들여쓴 Object: 줄(목록 안 코드 블록 복사 등)도 선언으로 읽는다
+        const objectNames = headerValue(line).split(',').map(obj => obj.trim()).filter(Boolean);
         objectNames.forEach(addObject);
       } else if (line.includes('-->')) {
         const [from, to] = line.split('-->').map(part => part.trim());
@@ -41,7 +47,7 @@ const JobFlowToSVG = {
       }
       lineIndex++;
     });
-    return { masterObject, objects, relationships, standaloneShapes };
+    return { orchestrator, masterObject: orchestrator, objects, relationships, standaloneShapes };
   },
   addAsterisksToInput(input) {
     const lines = input.split('\n');
@@ -85,7 +91,7 @@ const JobFlowToSVG = {
       .replace(/'/g, '&#39;');
   },
   generateSVG(jobFlowScript) {
-    const { objects, relationships, standaloneShapes } = this.parseJobFlow(jobFlowScript);
+    const { orchestrator, objects, relationships, standaloneShapes } = this.parseJobFlow(jobFlowScript);
     const OBJECT_WIDTH = 240;
     const OBJECT_HEIGHT = 32;
     const VERTICAL_GAP = 50;
@@ -306,8 +312,7 @@ const JobFlowToSVG = {
     objects.forEach(o => {
       const s = objectHeader[o];
       const headerFontSize = this.calculateFontSize(o, s.width, s.height);
-      svg += `<rect x="${s.x}" y="${s.y}" width="${s.width}" height="${s.height}" fill="none" stroke="gray"/>`;
-      svg += `<text x="${s.x + s.width/2}" y="${s.y + s.height/2}" text-anchor="middle" dominant-baseline="middle" font-size="${headerFontSize}">${this.escapeXml(o)}</text>`;
+      svg += this.drawObjectHeader(s, o, headerFontSize, o === orchestrator);
       svg += `<line x1="${s.x}" y1="${s.height}" x2="${s.x}" y2="${svgHeight}" stroke="gray"/>`;
       svg += `<line x1="${s.x + s.width}" y1="${s.height}" x2="${s.x + s.width}" y2="${svgHeight}" stroke="gray"/>`;
     });
@@ -374,6 +379,17 @@ const JobFlowToSVG = {
     if (lastPart.toLowerCase().startsWith("on")) lastPart = lastPart.slice(2);
     return lastPart.replace(/\*+$/, '');
   },
+  // 객체 헤더. orchestrator로 선언된 객체는 열 위치와 무관하게 채움색·글자색·굵기를 바꿔 구별한다
+  drawObjectHeader(s, name, fontSize, isOrchestrator) {
+    const style = this.ORCHESTRATOR_HEADER_STYLE;
+    const rectAttrs = isOrchestrator ? `fill="${style.fill}" stroke="${style.stroke}" stroke-width="${style.strokeWidth}"` : 'fill="none" stroke="gray"';
+    const textAttrs = isOrchestrator ? ` font-weight="${style.fontWeight}" fill="${style.text}"` : '';
+    let header = `<rect x="${s.x}" y="${s.y}" width="${s.width}" height="${s.height}" ${rectAttrs}/>`;
+    header += `<text x="${s.x + s.width/2}" y="${s.y + s.height/2}" text-anchor="middle" dominant-baseline="middle" font-size="${fontSize}"${textAttrs}>${this.escapeXml(name)}</text>`;
+    return header;
+  },
+  // 흰 글자 대비 6.4:1(WCAG AA)인 진녹색. 레인 색은 시각 편집기(JobFlowCanvasEditor)와 맞춘다
+  ORCHESTRATOR_HEADER_STYLE: { fill: '#0f6b53', stroke: '#0a4d3c', strokeWidth: 2, text: '#ffffff', fontWeight: 'bold' },
   calculateFontSize(text, maxWidth, maxHeight, baseFontSize = 14) {
     const charWidthRatio = 0.6;
     const estimatedWidth = text.length * baseFontSize * charWidthRatio;

@@ -16,7 +16,7 @@
 - **오디오 녹화**: 상단 툴바의 녹화 버튼으로 문서/코드를 보며 음성 설명을 녹음하고, 녹음 중 참조한 위치(파일 열람·텍스트 복사·라인 클릭)를 오디오 시간축에 맞춰 JSON으로 기록합니다. 입력 장치(마이크)를 드롭다운으로 선택할 수 있고, 녹음 중 입력 레벨이 표시됩니다.
 - **웹 페이지 함께 녹화**: 툴바에 URL을 넣고 「웹 열기」를 누르면 전용 프로필의 Chrome 창이 그 사이트를 엽니다. 녹음 중 그 창에서 한 클릭·더블클릭·복사가 요소 정보(CSS 경로, 태그, 텍스트, 상위 제목, 주변 텍스트)와 함께 문서 이벤트와 **같은 타임라인**에 기록됩니다. Chrome이 필요합니다(`MDVIEW_CHROME_PATH`로 경로 지정 가능).
 - **프롬프트 생성**: 녹화 저장 후 발화와 문서·웹 조작을 시간순 텍스트로 정리한 `prompt.txt`가 항상 만들어집니다(API 키가 없으면 조작 기록만으로). 완료 토스트의 「prompt.txt 열기」로 바로 볼 수 있고, 그 내용을 AI에게 붙여 넣으면 됩니다.
-- **전사**: 녹화 저장 시 OpenAI `whisper-1` API로 **자동 전사**되어(API 키 필요) 발화 세그먼트 타임스탬프와 참조 이벤트를 병합한 `transcript.json` 문서가 생성됩니다. 어느 시점에 어느 라인을 가리키고 어떤 텍스트를 복사했는지 발화와 함께 확인할 수 있습니다. 진행 상태는 툴바 칩으로 표시되고, 완료 시 뷰어에서 바로 열 수 있습니다. 수동 실행은 `mdview transcribe`.
+- **전사**: 녹화 저장 시 OpenAI `whisper-1` API로 **자동 전사**되어(API 키 필요) 발화 세그먼트 타임스탬프와 참조 이벤트를 병합한 `transcript.json` 문서가 생성됩니다. 완료되면 파일의 전체 내용을 시스템 클립보드에 자동 복사하고 시스템 알림과 화면 토스트로 알려줍니다. 진행 상태는 툴바 칩으로 표시됩니다. 수동 실행은 `mdview transcribe`.
 - **상세 로깅**: `DEBUG_MODE`/`LOG_TO_FILE` 환경변수로 2계층 로깅(텍스트 로그 + 카테고리별 상세 아티팩트 + 세션 프로세스 다이어그램)을 켤 수 있습니다.
 
 ## 빌드 및 설치
@@ -64,10 +64,16 @@ AI나 동료에게 전달하기 위한 기능입니다.
    - **word**: 본문 더블클릭 — 선택된 텍스트(단어)가 저장됨. 여백 등을 더블클릭해 선택된 텍스트가 없으면 클릭 위치 뒤의 첫 단어를 찾아 저장하고 그 단어를 선택 상태로 표시
    - PDF 문서에서는 라인 대신 `pdf` 필드가 기록됩니다 — 클릭(focus)은 페이지 번호와 페이지 좌상단 기준 0~1 정규화 좌표(`page`, `x`, `y`) 및 클릭 지점 주변 텍스트, 텍스트 선택 복사(copy)와 더블클릭(word)은 페이지 번호와 선택 문자열
    - **web-open / web-click / web-dblclick / web-copy**: 「웹 열기」로 연 Chrome 창에서의 조작 — `url`, `title`, `selector`, `tag`, `id`, `classes`, `text`, `heading`, `context`, `selection`
-3. 버튼을 다시 누르면 저장됩니다: `mdview-recordings/rec-<timestamp>/` (mdview를 실행한 터미널의 현재 디렉토리 기준)
+3. 버튼을 다시 누르면 사용자 앱 데이터의 고정 경로에 저장됩니다. 파일 모드와 폴더 모드 모두 작업 디렉토리와 무관하게 같은 위치를 사용합니다.
+   - macOS: `~/Library/Application Support/mdview/mdview-recordings/rec-<timestamp>/`
+   - Linux: `${XDG_CONFIG_HOME:-~/.config}/mdview/mdview-recordings/rec-<timestamp>/`
    - `audio.webm` (브라우저에 따라 `.m4a`/`.ogg`) — 녹음 오디오
    - `events.json` — 이벤트 타임라인
    - `prompt.txt` — 발화·조작 타임라인 텍스트 (AI에게 붙여 넣는 용도, 항상 생성)
+
+녹화 폴더와 그 안의 모든 파일은 저장 시각으로부터 **7일**이 지나면 자동 삭제됩니다.
+mdview 시작 시, 녹화 저장 전, 실행 중 매시간 정리하며, 종료된 동안 만료된 녹화는 다음 실행 때 정리합니다.
+후처리 중인 녹화는 완료될 때까지 보존합니다.
 
 `events.json` 예시:
 
@@ -132,13 +138,15 @@ MDVIEW_E2E_CHROME=1 go test ./internal/mdview/ -run TestWebCaptureEndToEnd
 ### 전사 (음성 → 텍스트)
 
 **자동 후처리**: 녹화 저장 직후 서버가 백그라운드에서 전사(API 키가 있고 25MB 이하일 때)와 `prompt.txt` 생성을 진행합니다.
-툴바에 "후처리 중" 칩이 표시되고, 완료되면 토스트의 「prompt.txt 열기」로 바로 볼 수 있습니다.
+툴바에 "후처리 중" 칩이 표시되고, `transcript.json` 생성 후 **JSON 전체 내용이 클립보드에 자동 복사**됩니다.
+시스템 알림과 완료 토스트를 확인한 뒤 원하는 곳에 붙여 넣으면 됩니다. macOS에서는 `pbcopy`와 `osascript`를 사용하므로 브라우저 창에 포커스가 없어도 동작합니다.
+복사 실패 시 토스트의 「transcript.json 복사」로 다시 시도할 수 있고, 「prompt.txt 열기」로 저장된 프롬프트도 볼 수 있습니다.
 (키가 없거나 오디오가 25MB를 넘으면 전사만 생략되고 `prompt.txt`는 조작 기록만으로 만들어집니다. 상태 API: `GET /api/recording/status`)
 
 수동 실행 (`mdview transcribe`는 전사 여부와 무관하게 `prompt.txt`도 다시 만듭니다):
 
 ```bash
-mdview transcribe mdview-recordings/rec-20260718-230000
+mdview transcribe "$HOME/Library/Application Support/mdview/mdview-recordings/rec-20260718-230000"
 mdview transcribe -lang ko <recording-dir>       # 언어 고정 (기본: 자동 감지)
 mdview transcribe -model large-v3 <recording-dir>  # 로컬 whisper CLI 사용
 ```
@@ -216,6 +224,8 @@ cli/mdview/
       tree.go                # 디렉토리 트리 구성 Worker
       filetypes.go           # 뷰어 대상 파일 타입 정책
       recording.go           # 녹화(오디오+이벤트) 저장 Worker
+      recording_retention.go # 고정 저장 경로와 7일 보관 정리
+      recording_completion.go # 전사 JSON 클립보드 복사와 시스템 알림
       transcribe.go          # 전사(whisper-1 API/로컬 CLI) 및 transcript.md 생성 Orchestrator
       config.go              # 사용자 설정 (~/.config/mdview/config.json)
       websession.go          # 웹 조작 이벤트 검증·버퍼 Service

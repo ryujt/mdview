@@ -101,6 +101,21 @@ func TestSaveRecordingUniqueDir(t *testing.T) {
 	}
 }
 
+func TestSaveRecordingRemovesPartialDirectoryOnFailure(t *testing.T) {
+	base := t.TempDir()
+	_, _, err := SaveRecording(base, strings.NewReader("audio"), "audio/webm", map[string]any{"invalid": make(chan int)}, time.Now())
+	if err == nil {
+		t.Fatal("잘못된 메타데이터 저장이 성공함")
+	}
+	entries, err := os.ReadDir(filepath.Join(base, recordingsDirName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("실패한 녹화의 불완전한 디렉토리가 남아 있음: %v", entries)
+	}
+}
+
 // buildRecordingForm은 audio 파트(Content-Type 지정)와 meta 필드를 가진 multipart 본문을 만든다.
 func buildRecordingForm(t *testing.T, audioContent, audioMime, meta string) (*bytes.Buffer, string) {
 	t.Helper()
@@ -129,11 +144,13 @@ func buildRecordingForm(t *testing.T, audioContent, audioMime, meta string) (*by
 func TestHandleRecordingFolderMode(t *testing.T) {
 	t.Setenv(openaiKeyEnv, "")
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	root := t.TempDir()
 	server, err := NewFolderServer(NewHub(), root)
 	if err != nil {
 		t.Fatalf("NewFolderServer error: %v", err)
 	}
+	server.completion = testRecordingCompletion()
 	ts := httptest.NewServer(server.Handler())
 	defer func() {
 		server.WaitPipelines()
@@ -159,8 +176,15 @@ func TestHandleRecordingFolderMode(t *testing.T) {
 	if err := json.NewDecoder(res.Body).Decode(&result); err != nil {
 		t.Fatalf("response decode error: %v", err)
 	}
-	if !strings.HasPrefix(result.Dir, filepath.Join(root, recordingsDirName)) {
-		t.Errorf("dir = %q, want under %s", result.Dir, filepath.Join(root, recordingsDirName))
+	base, err := recordingBaseDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(result.Dir, filepath.Join(base, recordingsDirName)+string(filepath.Separator)) {
+		t.Errorf("dir = %q, want under %s", result.Dir, filepath.Join(base, recordingsDirName))
+	}
+	if _, err := os.Stat(filepath.Join(root, recordingsDirName)); !os.IsNotExist(err) {
+		t.Error("프로젝트 폴더에 녹화 저장소가 생성됨")
 	}
 
 	audioData, err := os.ReadFile(filepath.Join(result.Dir, result.Audio))
@@ -191,16 +215,17 @@ func TestHandleRecordingFolderMode(t *testing.T) {
 func TestHandleRecordingFileMode(t *testing.T) {
 	t.Setenv(openaiKeyEnv, "")
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	dir := t.TempDir()
-	workDir := t.TempDir()
 	target := filepath.Join(dir, "doc.md")
 	if err := os.WriteFile(target, []byte("# doc"), 0o644); err != nil {
 		t.Fatalf("fixture write error: %v", err)
 	}
-	server, err := NewFileServer(NewHub(), target, workDir)
+	server, err := NewFileServer(NewHub(), target)
 	if err != nil {
 		t.Fatalf("NewFileServer error: %v", err)
 	}
+	server.completion = testRecordingCompletion()
 	ts := httptest.NewServer(server.Handler())
 	defer func() {
 		server.WaitPipelines()
@@ -222,34 +247,42 @@ func TestHandleRecordingFileMode(t *testing.T) {
 	if err := json.NewDecoder(res.Body).Decode(&result); err != nil {
 		t.Fatalf("response decode error: %v", err)
 	}
-	// file 모드는 mdview를 실행한 터미널의 작업 디렉토리 아래 저장된다.
-	if !strings.HasPrefix(result.Dir, filepath.Join(workDir, recordingsDirName)) {
-		t.Errorf("dir = %q, want under %s", result.Dir, filepath.Join(workDir, recordingsDirName))
+	base, err := recordingBaseDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(result.Dir, filepath.Join(base, recordingsDirName)+string(filepath.Separator)) {
+		t.Errorf("dir = %q, want under %s", result.Dir, filepath.Join(base, recordingsDirName))
+	}
+	if _, err := os.Stat(filepath.Join(dir, recordingsDirName)); !os.IsNotExist(err) {
+		t.Error("대상 파일의 폴더에 녹화가 저장됨")
 	}
 	if result.Audio != "audio.m4a" {
 		t.Errorf("audio = %q, want audio.m4a", result.Audio)
 	}
 }
 
-func TestRecordingBaseDirFileModeFallback(t *testing.T) {
-	dir := t.TempDir()
-	target := filepath.Join(dir, "doc.md")
-	if err := os.WriteFile(target, []byte("# doc"), 0o644); err != nil {
-		t.Fatalf("fixture write error: %v", err)
-	}
-	// workDir가 비어 있으면 대상 파일의 디렉토리로 폴백한다.
-	server, err := NewFileServer(NewHub(), target, "")
+func TestRecordingBaseDirIndependentOfWorkingDirectory(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	config, err := os.UserConfigDir()
 	if err != nil {
-		t.Fatalf("NewFileServer error: %v", err)
+		t.Fatal(err)
 	}
-	if got := server.recordingBaseDir(); got != dir {
-		t.Errorf("recordingBaseDir() = %q, want %q", got, dir)
+	want := filepath.Join(config, configDirName)
+	for range 2 {
+		t.Chdir(t.TempDir())
+		got, err := recordingBaseDir()
+		if err != nil || got != want {
+			t.Fatalf("recordingBaseDir() = %q, %v; want %q", got, err, want)
+		}
 	}
 }
 
 func TestHandleRecordingRejections(t *testing.T) {
 	t.Setenv(openaiKeyEnv, "")
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	root := t.TempDir()
 	server, err := NewFolderServer(NewHub(), root)
 	if err != nil {

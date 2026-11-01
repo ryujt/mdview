@@ -73,6 +73,10 @@ type TranscribeJob struct {
 	PromptRel string `json:"promptRel,omitempty"`
 	Error     string `json:"error,omitempty"`
 	// Note는 전사를 생략·실패한 사유 등 사용자에게 보여 줄 짧은 안내
-	Note      string `json:"note,omitempty"`
-	UpdatedAt string `json:"updatedAt"`
+	Note string `json:"note,omitempty"`
+	// ClipboardCopied는 transcript.json 전체 내용을 시스템 클립보드에 복사했는지 나타낸다.
+	ClipboardCopied   bool   `json:"clipboardCopied"`
+	ClipboardError    string `json:"clipboardError,omitempty"`
+	NotificationError string `json:"notificationError,omitempty"`
+	UpdatedAt         string `json:"updatedAt"`
 }

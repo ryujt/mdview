@@ -26,11 +26,13 @@ func newWebTestServer(t *testing.T) *webTestServer {
 	t.Helper()
 	t.Setenv(openaiKeyEnv, "")
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	root := t.TempDir()
 	server, err := NewFolderServer(NewHub(), root)
 	if err != nil {
 		t.Fatalf("NewFolderServer error: %v", err)
 	}
+	server.completion = testRecordingCompletion()
 	ts := httptest.NewServer(server.Handler())
 	t.Cleanup(func() {
 		server.WaitPipelines()
@@ -240,9 +242,8 @@ func TestHandleRecordingMergesWebEventsAndRunsPipeline(t *testing.T) {
 	if job.Prompt != filepath.Join(result.Dir, promptFileName) {
 		t.Errorf("job.Prompt = %q", job.Prompt)
 	}
-	wantRel, _ := filepath.Rel(ts.root, job.Prompt)
-	if job.PromptRel != filepath.ToSlash(wantRel) {
-		t.Errorf("job.PromptRel = %q, want %q", job.PromptRel, wantRel)
+	if job.PromptRel != "" {
+		t.Errorf("프로젝트 밖의 녹화에 상대 경로가 있음: %q", job.PromptRel)
 	}
 	if job.Transcript != "" || job.TranscriptRel != "" {
 		t.Errorf("전사 없이 transcript 경로가 채워짐: %+v", job)
@@ -388,7 +389,14 @@ func TestHandleRecordingKeepsWebEventsOnSaveFailure(t *testing.T) {
 	ts.server.web.Add(webClickPayload(start+1500, "div.card", "https://example.com"))
 
 	// 녹화 디렉토리 자리에 일반 파일을 두어 MkdirAll이 실패하게 한다.
-	blocker := filepath.Join(ts.root, recordingsDirName)
+	base, err := recordingBaseDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(base, recordingDirPerm); err != nil {
+		t.Fatal(err)
+	}
+	blocker := filepath.Join(base, recordingsDirName)
 	if err := os.WriteFile(blocker, []byte("x"), 0o644); err != nil {
 		t.Fatalf("blocker write error: %v", err)
 	}

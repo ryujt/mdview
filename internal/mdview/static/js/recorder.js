@@ -7,7 +7,7 @@
 //   - 단어 지정(word: 더블클릭 — 선택된 텍스트, 없으면 클릭 위치 뒤의 첫 단어)
 // 을 오디오 시간축(t: 녹음 시작 기준 ms)에 맞춰 기록한다.
 // 종료 시 오디오와 이벤트 메타(JSON)를 서버(/api/recording)에 업로드해
-// mdview-recordings/rec-<timestamp>/ 아래 저장한다.
+// 사용자 앱 데이터의 mdview/mdview-recordings/rec-<timestamp>/ 아래 저장한다.
 //
 // 라인 번호 정책:
 //   - 코드뷰어: 파일의 실제 라인 번호 (클릭 좌표/선택 영역에서 계산)
@@ -18,6 +18,7 @@
 
 const API_RECORDING_PATH = '/api/recording';
 const API_RECORDING_STATUS_PATH = '/api/recording/status';
+const API_RECORDING_FILE_PATH = '/api/recording/file';
 const API_WEB_START_PATH = '/api/web/start';
 const API_WEB_STOP_PATH = '/api/web/stop';
 const API_WEB_LIVE_PATH = '/api/web/live';
@@ -552,21 +553,47 @@ function pollTranscribeStatus(id) {
   tick();
 }
 
-/** 후처리 완료 토스트. prompt.txt를 우선 열고, 전사 문서가 있으면 함께 안내한다. */
+/** 후처리 완료 토스트. 시스템 클립보드 복사 결과와 저장 파일을 안내한다. */
 function notifyTranscriptReady(job) {
   const state = ctx.getState();
   const canOpen = state.mode === 'folder' && ctx.openFile;
   const lines = [];
+  if (job.clipboardCopied) lines.push('transcript.json 내용을 클립보드에 복사했습니다. 붙여 넣어 사용하세요.');
+  if (job.clipboardError) lines.push(job.clipboardError);
+  if (job.notificationError) lines.push(job.notificationError);
   if (job.promptRel || job.prompt) lines.push(`prompt.txt 생성: ${job.promptRel || job.prompt}`);
   if (job.transcript) lines.push(`전사 문서: ${job.transcriptRel || job.transcript}`);
   if (job.note) lines.push(job.note);
   const text = lines.length ? lines.join('\n') : '후처리 완료';
-  if (canOpen && job.promptRel) {
+  if (job.clipboardError && job.transcript) {
+    showToast(text, {
+      action: { label: 'transcript.json 복사', run: () => copyTranscript(job.id) },
+    });
+  } else if (canOpen && job.promptRel) {
     showToast(text, {
       action: { label: 'prompt.txt 열기', run: () => ctx.openFile(job.promptRel) },
     });
+  } else if (job.prompt) {
+    showToast(text, {
+      action: { label: 'prompt.txt 열기', run: () => window.open(recordingFileURL(job.id, 'prompt.txt'), '_blank', 'noopener') },
+    });
   } else {
     showToast(text);
+  }
+}
+
+function recordingFileURL(id, name) {
+  return `${API_RECORDING_FILE_PATH}?id=${encodeURIComponent(id)}&name=${encodeURIComponent(name)}`;
+}
+
+async function copyTranscript(id) {
+  try {
+    const res = await fetch(recordingFileURL(id, 'transcript.json'));
+    if (!res.ok) throw new Error('전사 문서를 읽을 수 없습니다.');
+    await navigator.clipboard.writeText(await res.text());
+    showToast('transcript.json 내용을 클립보드에 복사했습니다.');
+  } catch {
+    showToast('클립보드에 복사하지 못했습니다. 저장된 transcript.json 파일을 확인해주세요.', { error: true });
   }
 }
 

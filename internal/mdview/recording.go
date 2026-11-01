@@ -23,8 +23,8 @@ const (
 	eventsFileName      = "events.json"
 	defaultAudioExt     = ".webm"
 
-	recordingDirPerm  = 0o755
-	recordingFilePerm = 0o644
+	recordingDirPerm  = 0o700
+	recordingFilePerm = 0o600
 
 	// 동일 초에 저장이 겹칠 때 디렉토리 이름 충돌을 피하기 위한 최대 시도 횟수
 	maxDirSuffixTries = 100
@@ -60,6 +60,12 @@ func SaveRecording(base string, audio io.Reader, contentType string, meta map[st
 	if err != nil {
 		return "", "", err
 	}
+	createdDir := dir
+	defer func() {
+		if err != nil {
+			_ = os.RemoveAll(createdDir)
+		}
+	}()
 
 	audioName = audioFileBase + AudioExtFromMime(contentType)
 	if err := writeStream(filepath.Join(dir, audioName), audio); err != nil {

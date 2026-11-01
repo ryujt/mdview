@@ -133,12 +133,6 @@ func runFileMode(filePath string, port int) {
 		fmt.Fprintf(os.Stderr, "abs path error: %v\n", err)
 		os.Exit(1)
 	}
-	// 녹화 저장 기준: mdview를 실행한 터미널의 작업 디렉토리 (실패 시 파일 디렉토리 폴백)
-	workDir, err := os.Getwd()
-	if err != nil {
-		workDir = ""
-	}
-
 	logging.StartSession()
 	defer logging.EndSession()
 
@@ -154,7 +148,7 @@ func runFileMode(filePath string, port int) {
 	hub := mdview.NewHub()
 	go hub.Run()
 
-	server, err := mdview.NewFileServer(hub, absPath, workDir)
+	server, err := mdview.NewFileServer(hub, absPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "server init error: %v\n", err)
 		os.Exit(1)

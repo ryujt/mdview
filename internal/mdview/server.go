@@ -34,6 +34,7 @@ const (
 	apiSelectPath          = "/api/select"
 	apiRecordingPath       = "/api/recording"
 	apiRecordingStatusPath = "/api/recording/status"
+	apiRecordingFilePath   = "/api/recording/file"
 	wsPath                 = "/ws"
 	staticPrefix           = "/static/"
 	rootPath               = "/"
@@ -152,10 +153,6 @@ type Server struct {
 	// file 모드: 고정된 파일 절대 경로
 	filePath string
 
-	// file 모드: mdview를 실행한 터미널의 작업 디렉토리 (녹화 저장 기준).
-	// 비어 있으면 대상 파일의 디렉토리로 폴백한다.
-	workDir string
-
 	// folder 모드: 루트 디렉토리 절대 경로
 	root string
 
@@ -168,7 +165,8 @@ type Server struct {
 	// webOpener는 전용 Chrome 수명을 소유한다 (수집 payload는 web.Add로 간다).
 	webOpener *WebOpener
 	// pipeline은 녹화 저장 후 후처리(전사·프롬프트)이다.
-	pipeline *Pipeline
+	pipeline   *Pipeline
+	completion *recordingCompletion
 	// pending은 진행 중인 후처리 goroutine이다. 종료 시 여기서 기다린다.
 	pending sync.WaitGroup
 
@@ -178,21 +176,13 @@ type Server struct {
 }
 
 // NewFileServer는 단일 파일을 서빙하는 Server를 생성한다.
-// workDir는 mdview를 실행한 터미널의 작업 디렉토리로, 녹화 저장 기준이 된다.
-// 비어 있으면 대상 파일의 디렉토리를 기준으로 사용한다.
-func NewFileServer(hub *Hub, filePath, workDir string) (*Server, error) {
+func NewFileServer(hub *Hub, filePath string) (*Server, error) {
 	abs, err := filepath.Abs(filePath)
 	if err != nil {
 		return nil, err
 	}
-	if workDir != "" {
-		if workDir, err = filepath.Abs(workDir); err != nil {
-			return nil, err
-		}
-	}
 	s := newServer(ModeFile, hub)
 	s.filePath = abs
-	s.workDir = workDir
 	return s, nil
 }
 
@@ -213,6 +203,7 @@ func newServer(mode Mode, hub *Hub) *Server {
 		transcribeJobs: map[string]*TranscribeJob{},
 		web:            NewWebSession(),
 		pipeline:       NewPipeline(),
+		completion:     newRecordingCompletion(),
 	}
 	s.webOpener = NewWebOpener(s.web.Add)
 	return s
@@ -231,6 +222,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc(apiSelectPath, s.handleSelect)
 	mux.HandleFunc(apiRecordingPath, s.handleRecording)
 	mux.HandleFunc(apiRecordingStatusPath, s.handleRecordingStatus)
+	mux.HandleFunc(apiRecordingFilePath, s.handleRecordingFile)
 	mux.HandleFunc(apiWebStartPath, s.handleWebStart)
 	mux.HandleFunc(apiWebStopPath, s.handleWebStop)
 	mux.HandleFunc(apiWebCancelPath, s.handleWebCancel)
@@ -241,6 +233,10 @@ func (s *Server) Handler() http.Handler {
 
 // Start는 주어진 리스너에서 HTTP 서버를 실행한다 (블로킹). StopHTTP로 종료하면 조용히 반환한다.
 func (s *Server) Start(listener net.Listener) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s.pruneRecordings(time.Now())
+	go s.runRecordingRetention(ctx, recordingCleanupInterval)
 	server := &http.Server{Handler: s.Handler()}
 	s.httpMu.Lock()
 	s.httpServer = server
@@ -554,7 +550,13 @@ func (s *Server) handleRecording(w http.ResponseWriter, r *http.Request) {
 	webEvents, dropped := s.web.Snapshot(metaDurationMs(meta))
 	mergeWebEvents(meta, webEvents, dropped)
 
-	dir, audioName, err := SaveRecording(s.recordingBaseDir(), audio, header.Header.Get("Content-Type"), meta, time.Now())
+	base, err := recordingBaseDir()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	s.pruneRecordings(time.Now())
+	dir, audioName, err := SaveRecording(base, audio, header.Header.Get("Content-Type"), meta, time.Now())
 	eventCount, eventsSummary := summarizeRecordingEvents(meta)
 	if err != nil {
 		logging.Error("[Recording] 저장 실패: %v", err)
@@ -607,6 +609,7 @@ func (s *Server) startPipeline(dir string) {
 		job := s.pipeline.Run(dir)
 		job.TranscriptRel = s.relToRoot(job.Transcript)
 		job.PromptRel = s.relToRoot(job.Prompt)
+		s.completion.complete(job)
 		s.setJob(job)
 		if job.State == TranscribeStateError {
 			logging.Error("[Pipeline] 후처리 실패 (%s): %s", id, job.Error)
@@ -675,17 +678,63 @@ func (s *Server) handleRecordingStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, jobs)
 }
 
-// recordingBaseDir는 녹화 저장의 기준 디렉토리를 반환한다.
-// 두 모드 모두 mdview를 실행한 터미널의 작업 디렉토리가 기준이다
-// (folder 모드의 root가 곧 실행 시 작업 디렉토리).
-func (s *Server) recordingBaseDir() string {
-	if s.mode == ModeFile {
-		if s.workDir != "" {
-			return s.workDir
-		}
-		return filepath.Dir(s.filePath)
+// handleRecordingFile는 이 프로세스가 생성한 결과 파일만 제공한다.
+// 녹화가 프로젝트 밖에 저장되더라도 완료 토스트에서 결과를 열 수 있다.
+func (s *Server) handleRecordingFile(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, methodNotAllowedMessage, http.StatusMethodNotAllowed)
+		return
 	}
-	return s.root
+	if !isSameOrigin(r) {
+		http.Error(w, forbiddenOriginMessage, http.StatusForbidden)
+		return
+	}
+	s.jobMu.Lock()
+	job := s.transcribeJobs[r.URL.Query().Get("id")]
+	var name, dir string
+	if job != nil {
+		dir = job.Dir
+		switch r.URL.Query().Get("name") {
+		case promptFileName:
+			if job.Prompt != "" {
+				name = promptFileName
+			}
+		case transcriptFileName:
+			if job.Transcript != "" {
+				name = transcriptFileName
+			}
+		}
+	}
+	s.jobMu.Unlock()
+	if name == "" {
+		http.NotFound(w, r)
+		return
+	}
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	defer root.Close()
+	file, err := root.Open(name)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil || !info.Mode().IsRegular() {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	contentType := "text/plain; charset=utf-8"
+	if name == transcriptFileName {
+		contentType = "application/json; charset=utf-8"
+	}
+	w.Header().Set("Content-Type", contentType)
+	http.ServeContent(w, r, name, info.ModTime(), file)
 }
 
 func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
