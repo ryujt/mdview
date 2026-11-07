@@ -217,6 +217,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle(staticPrefix, http.FileServer(http.FS(staticFiles)))
 	mux.HandleFunc(wsPath, s.handleWS)
 	mux.HandleFunc(apiModePath, s.handleMode)
+	mux.HandleFunc(apiSettingsPath, s.handleSettings)
 	mux.HandleFunc(apiTreePath, s.handleTree)
 	mux.HandleFunc(apiFilePath, s.handleFile)
 	mux.HandleFunc(apiSelectPath, s.handleSelect)
@@ -803,6 +804,19 @@ func (s *Server) serveAsset(w http.ResponseWriter, r *http.Request) bool {
 	info, err := os.Stat(candidate)
 	if err != nil || info.IsDir() {
 		return false
+	}
+	// ServeFile은 index.html 요청을 디렉토리 URL로 리다이렉트한다.
+	// HTML 미리보기에서는 원본 문서를 그대로 반환해야 중첩 뷰어가 생기지 않는다.
+	if ext := strings.ToLower(filepath.Ext(candidate)); ext == ".html" || ext == ".htm" {
+		file, err := os.Open(candidate)
+		if err != nil {
+			return false
+		}
+		defer file.Close()
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
+		http.ServeContent(w, r, info.Name(), info.ModTime(), file)
+		return true
 	}
 	http.ServeFile(w, r, candidate)
 	return true

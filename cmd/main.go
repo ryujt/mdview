@@ -18,6 +18,7 @@ import (
 
 const (
 	usage = `Usage: mdview [-port N] [file]
+       mdview --version
        mdview transcribe [-model NAME] [-lang CODE] <recording-dir>
 
   인자 없음:  현재 디렉토리를 사이드바로 탐색한다.
@@ -41,6 +42,13 @@ const (
 	httpShutdownTimeout = 2 * time.Second
 )
 
+// 배포 시 -ldflags로 설정하며, 소스에서 직접 실행하면 dev로 표시한다.
+var (
+	version   = "dev"
+	commit    = "unknown"
+	buildDate = "unknown"
+)
+
 // main은 시스템 전체의 Orchestrator이다.
 // CLI 인자에 따라 실행 모드를 결정하고, 각 Worker/Gateway를 와이어링한다.
 func main() {
@@ -53,9 +61,14 @@ func main() {
 
 	fs := flag.NewFlagSet("mdview", flag.ExitOnError)
 	port := fs.Int("port", defaultPort, "리슨 포트 (사용 중이면 순차 시도, 0이면 임의 포트)")
+	showVersion := fs.Bool("version", false, "버전 정보 출력")
 	fs.Usage = func() { fmt.Fprintln(os.Stderr, usage) }
 	if err := fs.Parse(args); err != nil {
 		os.Exit(1)
+	}
+	if *showVersion {
+		fmt.Printf("mdview %s (commit %s, built %s)\n", version, commit, buildDate)
+		return
 	}
 	rest := fs.Args()
 
@@ -75,8 +88,8 @@ func main() {
 // runTranscribe는 녹화 전사 서브커맨드를 실행한다. 전사를 생략해야 하는 경우에도 prompt.txt는 만든다.
 func runTranscribe(args []string) {
 	fs := flag.NewFlagSet("transcribe", flag.ExitOnError)
-	model := fs.String("model", mdview.DefaultTranscribeModel,
-		"전사 모델 (whisper-1: OpenAI API, 그 외(large-v3 등): 로컬 whisper CLI)")
+	model := fs.String("model", "",
+		"전사 모델 (기본: 저장된 설정 또는 whisper-1, large-v3 등은 로컬 whisper CLI)")
 	lang := fs.String("lang", "", "발화 언어 코드 (예: ko). 비우면 자동 감지")
 	if err := fs.Parse(args); err != nil {
 		os.Exit(1)
@@ -84,6 +97,14 @@ func runTranscribe(args []string) {
 	if fs.NArg() != 1 {
 		fmt.Fprintln(os.Stderr, transcribeUsage)
 		os.Exit(1)
+	}
+	if *model == "" {
+		selected, err := mdview.ResolveTranscribeModel()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "전사 설정을 읽을 수 없습니다")
+			os.Exit(1)
+		}
+		*model = selected
 	}
 	dir := fs.Arg(0)
 

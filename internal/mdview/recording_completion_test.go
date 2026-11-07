@@ -23,7 +23,7 @@ func testRecordingCompletion() *recordingCompletion {
 
 func TestRecordingPipelineCopiesTranscriptBeforeNotification(t *testing.T) {
 	t.Setenv(openaiKeyEnv, "")
-	t.Setenv("HOME", t.TempDir())
+	setTestHome(t, t.TempDir())
 	dir := pipelineFixture(t)
 	writeFixture(t, dir, "audio.json", `{"text":"한글과 이모지 🎙️","language":"ko","segments":[{"start":0,"end":1,"text":"한글과 이모지 🎙️"}]}`)
 	s := newServer(ModeFolder, NewHub())

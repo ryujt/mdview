@@ -91,7 +91,7 @@ func TestPruneExpiredRecordingsDoesNotFollowSymlinks(t *testing.T) {
 }
 
 func TestRecordingRetentionTimer(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	setTestHome(t, t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	base, err := recordingBaseDir()
 	if err != nil {

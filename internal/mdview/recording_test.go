@@ -143,7 +143,7 @@ func buildRecordingForm(t *testing.T, audioContent, audioMime, meta string) (*by
 
 func TestHandleRecordingFolderMode(t *testing.T) {
 	t.Setenv(openaiKeyEnv, "")
-	t.Setenv("HOME", t.TempDir())
+	setTestHome(t, t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	root := t.TempDir()
 	server, err := NewFolderServer(NewHub(), root)
@@ -214,7 +214,7 @@ func TestHandleRecordingFolderMode(t *testing.T) {
 
 func TestHandleRecordingFileMode(t *testing.T) {
 	t.Setenv(openaiKeyEnv, "")
-	t.Setenv("HOME", t.TempDir())
+	setTestHome(t, t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	dir := t.TempDir()
 	target := filepath.Join(dir, "doc.md")
@@ -263,7 +263,7 @@ func TestHandleRecordingFileMode(t *testing.T) {
 }
 
 func TestRecordingBaseDirIndependentOfWorkingDirectory(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	setTestHome(t, t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	config, err := os.UserConfigDir()
 	if err != nil {
@@ -281,7 +281,7 @@ func TestRecordingBaseDirIndependentOfWorkingDirectory(t *testing.T) {
 
 func TestHandleRecordingRejections(t *testing.T) {
 	t.Setenv(openaiKeyEnv, "")
-	t.Setenv("HOME", t.TempDir())
+	setTestHome(t, t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	root := t.TempDir()
 	server, err := NewFolderServer(NewHub(), root)

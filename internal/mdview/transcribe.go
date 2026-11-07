@@ -22,7 +22,8 @@ import (
 // 기본 백엔드는 OpenAI Audio Transcriptions API의 whisper-1 모델이며
 // (설정 파일 또는 OPENAI_API_KEY의 API 키 필요), verbose_json 응답으로
 // 세그먼트 타임스탬프를 받아 이벤트 타임라인과 병합한다.
-// -model large-v3 등 다른 이름을 주면 로컬 openai-whisper CLI로 실행한다.
+// JSON 전사 모델은 시간 정보 없는 전체 전사문으로 저장한다.
+// -model large-v3 등 OpenAI 모델 이외의 이름을 주면 로컬 whisper CLI로 실행한다.
 const (
 	DefaultTranscribeModel = "whisper-1" // OpenAI API 모델
 	localWhisperDefault    = "large-v3"  // 로컬 CLI 권장 모델
@@ -54,9 +55,12 @@ type TranscriptSegment struct {
 
 // WhisperResult는 whisper --output_format json 결과에서 사용하는 필드이다.
 type WhisperResult struct {
-	Text     string              `json:"text"`
-	Language string              `json:"language"`
-	Segments []TranscriptSegment `json:"segments"`
+	Text      string              `json:"text"`
+	Language  string              `json:"language"`
+	Segments  []TranscriptSegment `json:"segments"`
+	Languages []struct {
+		Code string `json:"code"`
+	} `json:"languages,omitempty"`
 }
 
 // RecordingEvent는 events.json에 기록된 단일 이벤트이다.
@@ -137,12 +141,12 @@ func TranscribeRecording(dir, model, lang string) (string, error) {
 			artifact, err := runWhisperAPI(resultPath, audioPath, model, lang, apiKey)
 			elapsed := float64(time.Since(started).Milliseconds())
 			if err != nil {
-				logging.LogProcessEvent("execution", "step_err", "whisper-1 API 전사 실패",
+				logging.LogProcessEvent("execution", "step_err", model+" API 전사 실패",
 					&logging.EventOpts{ArtifactPath: artifact, DurationMs: elapsed})
 				return "", err
 			}
 			logging.LogProcessEvent("execution", "step_ok",
-				fmt.Sprintf("whisper-1 API 전사 (%.1fs)", elapsed/1000),
+				fmt.Sprintf("%s API 전사 (%.1fs)", model, elapsed/1000),
 				&logging.EventOpts{ArtifactPath: artifact, DurationMs: elapsed})
 		} else {
 			artifact, err := runWhisper(absDir, audioPath, model, lang)
@@ -250,22 +254,30 @@ func whisperResultPath(dir, audioPath string) string {
 }
 
 // isAPIModel은 OpenAI Audio API로 전사할 모델인지 반환한다.
-// whisper-1만 세그먼트 타임스탬프(verbose_json)를 지원한다.
 func isAPIModel(model string) bool {
-	return model == DefaultTranscribeModel
+	for _, option := range transcriptionModels() {
+		if option.ID == model {
+			return true
+		}
+	}
+	return false
 }
 
 // runWhisperAPI는 OpenAI Audio Transcriptions API로 전사를 실행하고
-// verbose_json 응답(세그먼트 start/end 타임스탬프 포함)을 결과 파일에 저장한다.
+// whisper-1은 verbose_json, 그 밖의 API 모델은 json 응답을 저장한다.
 // 반환값: whisper/ 카테고리에 저장된 상세 로그 아티팩트 경로 (없으면 빈 문자열).
 func runWhisperAPI(resultPath, audioPath, model, lang, apiKey string) (string, error) {
 	fmt.Printf("전사 실행: %s (%s)\n", modelDisplayName(model), filepath.Base(audioPath))
 	started := time.Now()
 	audioBytes := fileSize(audioPath)
 	uploadName := transcribeUploadName(audioPath)
+	responseFormat := "json"
+	if model == DefaultTranscribeModel {
+		responseFormat = "verbose_json"
+	}
 	requestSummary := fmt.Sprintf(
-		"POST %s/audio/transcriptions\nmodel=%s\nresponse_format=verbose_json\ntimestamp_granularities[]=segment\nlanguage=%s\nfile=%s (%d bytes)",
-		openaiAPIBase, model, orDefault(lang, "(자동 감지)"), uploadName, audioBytes)
+		"POST %s/audio/transcriptions\nmodel=%s\nresponse_format=%s\nlanguage=%s\nfile=%s (%d bytes)",
+		openaiAPIBase, model, responseFormat, orDefault(lang, "(자동 감지)"), uploadName, audioBytes)
 
 	// 실패 시에도 상세 로그를 남기는 헬퍼
 	fail := func(err error) (string, error) {
@@ -290,10 +302,16 @@ func runWhisperAPI(resultPath, audioPath, model, lang, apiKey string) (string, e
 		return fail(fmt.Errorf("오디오 읽기 실패: %w", err))
 	}
 	_ = mw.WriteField("model", model)
-	_ = mw.WriteField("response_format", "verbose_json")
-	_ = mw.WriteField("timestamp_granularities[]", "segment")
+	_ = mw.WriteField("response_format", responseFormat)
+	if model == DefaultTranscribeModel {
+		_ = mw.WriteField("timestamp_granularities[]", "segment")
+	}
 	if lang != "" {
-		_ = mw.WriteField("language", lang)
+		field := "language"
+		if model == "gpt-transcribe" {
+			field = "languages[]"
+		}
+		_ = mw.WriteField(field, lang)
 	}
 	if err := mw.Close(); err != nil {
 		return fail(err)
@@ -318,7 +336,7 @@ func runWhisperAPI(resultPath, audioPath, model, lang, apiKey string) (string, e
 		return fail(fmt.Errorf("OpenAI API 응답 읽기 실패: %w", err))
 	}
 	if res.StatusCode != http.StatusOK {
-		detail := string(body)
+		detail := strings.ReplaceAll(string(body), apiKey, "[redacted]")
 		if len(detail) > openaiErrorBodyLimit {
 			detail = detail[:openaiErrorBodyLimit] + "…"
 		}
@@ -402,7 +420,23 @@ func loadWhisperResult(path string) (*WhisperResult, error) {
 	if err := json.Unmarshal(data, &result); err != nil {
 		return nil, fmt.Errorf("whisper 결과 파싱 실패: %w", err)
 	}
+	if result.Language == "" && len(result.Languages) > 0 {
+		result.Language = result.Languages[0].Code
+	}
 	return &result, nil
+}
+
+// untimedSpeech는 시각을 제공하지 않는 모델의 전체 전사문이다.
+func untimedSpeech(result *WhisperResult) string {
+	if result == nil {
+		return ""
+	}
+	for _, seg := range result.Segments {
+		if strings.TrimSpace(seg.Text) != "" {
+			return ""
+		}
+	}
+	return strings.TrimSpace(result.Text)
 }
 
 func loadRecordingMeta(dir string) (*RecordingMeta, error) {
@@ -419,9 +453,10 @@ func loadRecordingMeta(dir string) (*RecordingMeta, error) {
 
 // modelDisplayName은 문서에 표기할 모델 이름을 반환한다.
 func modelDisplayName(model string) string {
+	if isAPIModel(model) {
+		return model + " (OpenAI Audio API)"
+	}
 	switch model {
-	case DefaultTranscribeModel:
-		return "whisper-1 (OpenAI Audio API)"
 	case localWhisperDefault:
 		return whisperModelCanonical
 	default:
@@ -436,17 +471,18 @@ func modelDisplayName(model string) string {
 
 // transcriptDoc은 transcript.json의 최상위 구조이다.
 type transcriptDoc struct {
-	Version    int             `json:"version"`
-	Tool       string          `json:"tool"`
-	Kind       string          `json:"kind"`
-	Mode       string          `json:"mode,omitempty"`
-	Target     string          `json:"target,omitempty"`
-	RecordedAt string          `json:"recordedAt,omitempty"`
-	DurationMs int64           `json:"durationMs,omitempty"`
-	Model      string          `json:"model"`
-	Language   string          `json:"language,omitempty"`
-	Guide      transcriptGuide `json:"guide"`
-	Timeline   []any           `json:"timeline"`
+	Version       int             `json:"version"`
+	Tool          string          `json:"tool"`
+	Kind          string          `json:"kind"`
+	Mode          string          `json:"mode,omitempty"`
+	Target        string          `json:"target,omitempty"`
+	RecordedAt    string          `json:"recordedAt,omitempty"`
+	DurationMs    int64           `json:"durationMs,omitempty"`
+	Model         string          `json:"model"`
+	Language      string          `json:"language,omitempty"`
+	UntimedSpeech string          `json:"untimedSpeech,omitempty"`
+	Guide         transcriptGuide `json:"guide"`
+	Timeline      []any           `json:"timeline"`
 }
 
 // transcriptGuide는 문서를 읽는 쪽(주로 AI)을 위한 스키마 설명이다.
@@ -508,7 +544,8 @@ func transcriptGuideText() transcriptGuide {
 			"select": "사용자가 더블클릭으로 단어/텍스트를 선택해 지칭함 (text=선택된 문자열). 웹이면 selection=선택 문자열",
 			"copy":   "사용자가 텍스트를 클립보드로 복사함 (text=원본 라인 전체, selection=실제 복사된 문자열). 웹이면 selection=복사 시점의 선택 문자열",
 		},
-		Fields: "file/line/lineEnd는 원본 파일 기준 위치. approx=true면 라인 번호가 근사값. " +
+		Fields: "untimedSpeech는 발화별 시간 정보를 제공하지 않는 모델의 전체 전사문이며, 조작 시각과 대응시키지 않는다. " +
+			"file/line/lineEnd는 원본 파일 기준 위치. approx=true면 라인 번호가 근사값. " +
 			"PDF 문서는 line 대신 pdf.page(1부터)와 pdf.x/pdf.y(페이지 좌상단 기준 0~1 정규화 클릭 좌표)를 사용하며, " +
 			"click의 text는 클릭 지점 주변 텍스트다. " +
 			"url이 있으면 웹 페이지 조작이다: file 대신 조작 당시 페이지 주소(url)·제목(title)과 요소 정보(selector/tag/id/classes), " +
@@ -564,17 +601,18 @@ func buildTranscriptJSON(meta *RecordingMeta, result *WhisperResult, model strin
 		target = meta.File
 	}
 	doc := transcriptDoc{
-		Version:    1,
-		Tool:       "mdview",
-		Kind:       "recording-transcript",
-		Mode:       meta.Mode,
-		Target:     target,
-		RecordedAt: meta.StartedAt,
-		DurationMs: meta.DurationMs,
-		Model:      modelDisplayName(model),
-		Language:   result.Language,
-		Guide:      transcriptGuideText(),
-		Timeline:   timeline,
+		Version:       1,
+		Tool:          "mdview",
+		Kind:          "recording-transcript",
+		Mode:          meta.Mode,
+		Target:        target,
+		RecordedAt:    meta.StartedAt,
+		DurationMs:    meta.DurationMs,
+		Model:         modelDisplayName(model),
+		Language:      result.Language,
+		UntimedSpeech: untimedSpeech(result),
+		Guide:         transcriptGuideText(),
+		Timeline:      timeline,
 	}
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)

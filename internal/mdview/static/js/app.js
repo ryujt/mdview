@@ -1,10 +1,13 @@
 import { renderMarkdown } from './markdown-renderer.js';
 import { renderCode, isMarkdownPath, isCodeViewerPath } from './code-viewer.js';
 import { renderPDF, isPdfPath, cancelPdfRender } from './pdf-viewer.js';
+import { renderHTML, isHtmlPath } from './html-viewer.js';
 import { initSidebar, highlightFile, revealFile } from './sidebar.js';
 import { initSidebarResizer } from './sidebar-resizer.js';
 import { initRecorder, noteFileOpen } from './recorder.js';
 import { initWebOpen } from './webopen.js';
+import { initPreviewMediaViewer } from './preview-media-viewer.js';
+import { initSettings } from './settings.js';
 
 const WS_PROTOCOL = 'ws:';
 const API_MODE_PATH = '/api/mode';
@@ -14,6 +17,7 @@ const RECONNECT_DELAY_MS = 1000;
 const SCROLL_RESTORE_RETRY_MS = 150;
 
 const preview = document.getElementById('preview');
+initPreviewMediaViewer(preview);
 const filenameDisplay = document.getElementById('filename-display');
 const sidebar = document.getElementById('sidebar');
 const emptyState = document.getElementById('empty-state');
@@ -42,6 +46,7 @@ const scrollPositions = new Map();
 
 // PDF 캐시 무효화 카운터. 활성 PDF가 디스크에서 바뀌면 증가한다.
 let pdfCacheBust = 0;
+let htmlCacheBust = 0;
 
 function getWebSocketURL() {
   const port = window.location.port;
@@ -54,12 +59,24 @@ function setEmptyState(visible) {
   preview.hidden = visible;
 }
 
-// 현재 파일 타입에 따라 마크다운 렌더링 또는 코드뷰어로 표시한다.
-// folder 모드는 서버 화이트리스트를 신뢰해 비-md 는 모두 코드뷰어로,
+// 현재 파일 타입에 따라 HTML/PDF/마크다운 렌더링 또는 코드뷰어로 표시한다.
+// folder 모드는 서버 화이트리스트를 신뢰해 그 외 파일은 모두 코드뷰어로,
 // file 모드는 알려진 코드/설정 타입만 코드뷰어로 보내고 나머지는 기존처럼 마크다운으로 렌더링한다.
 // 활성 파일이 PDF면 WS가 텍스트 내용을 싣지 않으므로(변경 신호만 수신)
 // 어떤 호출 경로로 오든 URL에서 다시 렌더링한다.
 function renderContent(text) {
+  const html = activeFileName && isHtmlPath(activeFileName);
+  document.body.classList.toggle('html-preview', Boolean(html));
+  if (html) {
+    cancelPdfRender();
+    setEmptyState(false);
+    contentRef.raw = text;
+    currentBlocksRef.current = [];
+    currentBlocksRef.transformed = '';
+    htmlCacheBust += 1;
+    renderHTML(activeDocumentUrl(htmlCacheBust) + window.location.hash, preview);
+    return;
+  }
   if (activeFileName && isPdfPath(activeFileName)) {
     pdfCacheBust += 1;
     renderActivePdf();
@@ -79,17 +96,18 @@ function renderContent(text) {
 
 // 활성 PDF를 원본 URL에서 렌더링한다 (folder: 상대 경로, file: 파일명).
 function renderActivePdf() {
+  document.body.classList.remove('html-preview');
   setEmptyState(false);
   contentRef.raw = '';
   currentBlocksRef.current = [];
   currentBlocksRef.transformed = '';
-  return renderPDF(activePdfUrl(), preview);
+  return renderPDF(activeDocumentUrl(pdfCacheBust), preview);
 }
 
-function activePdfUrl() {
+function activeDocumentUrl(cacheBust) {
   const rel = folderMode ? activeRelPath : fileBaseName(activeFileName);
   const encoded = (rel || '').split('/').map(encodeURIComponent).join('/');
-  return `/${encoded}?v=${pdfCacheBust}`;
+  return `/${encoded}?v=${cacheBust}`;
 }
 
 function fileBaseName(p) {
@@ -198,6 +216,7 @@ async function selectFile(relPath, options = {}) {
 }
 
 function showFileError(relPath) {
+  document.body.classList.remove('html-preview');
   const message = document.createElement('p');
   message.style.color = '#dc3545';
   message.textContent = `파일을 불러오지 못했습니다: ${relPath} (서버 연결을 확인하세요)`;
@@ -213,6 +232,7 @@ function deselectFile({ pushHistory = true } = {}) {
   if (!activeRelPath) return;
   selectSeq += 1;
   cancelPdfRender();
+  document.body.classList.remove('html-preview');
   rememberScroll();
   activeRelPath = null;
   activeFileName = null;
@@ -370,4 +390,5 @@ async function bootstrap() {
   }
 }
 
+initSettings();
 bootstrap();

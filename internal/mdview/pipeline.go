@@ -73,12 +73,16 @@ func (p *Pipeline) buildPrompt(dir string, result *WhisperResult) *TranscribeJob
 // transcribeIfPossible은 전사 조건을 확인한 뒤 전사를 시도한다. 생략·실패 모두 결과 nil을 반환할 뿐 중단하지 않는다.
 // note는 사용자에게 보여 줄 생략 사유 또는 "전사 실패: ..." 안내이며, 전사가 정상이면 빈 문자열이다.
 func transcribeIfPossible(dir string) (result *WhisperResult, note string) {
-	if reason := TranscribeSkipReason(dir, DefaultTranscribeModel); reason != "" {
+	model, err := ResolveTranscribeModel()
+	if err != nil {
+		return nil, "전사 설정을 읽을 수 없습니다"
+	}
+	if reason := TranscribeSkipReason(dir, model); reason != "" {
 		logging.Info("[Pipeline] 전사 생략: %s", reason)
 		fmt.Printf("전사를 생략합니다 (%s) — 조작 기록만으로 프롬프트를 만듭니다.\n", reason)
 		return nil, reason
 	}
-	if _, err := TranscribeRecording(dir, DefaultTranscribeModel, ""); err != nil {
+	if _, err := TranscribeRecording(dir, model, ""); err != nil {
 		logging.Error("[Pipeline] 전사 실패: %v", err)
 		fmt.Fprintf(os.Stderr, "전사 실패 (%v) — 조작 기록만으로 프롬프트를 만듭니다\n", err)
 		return nil, truncateRunes("전사 실패: "+err.Error(), maxJobNoteRunes)

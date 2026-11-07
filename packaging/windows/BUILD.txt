@@ -1,0 +1,31 @@
+Build the Windows x64 installer and portable ZIP from PowerShell:
+
+  cd cli\mdview
+  powershell -NoProfile -ExecutionPolicy Bypass -File packaging\windows\build-release.ps1
+
+Prerequisites: Windows, Go matching go.mod, Node.js, and Inno Setup 6.3+
+or 7, including its Korean language file. Python is not required.
+ISCC.exe is discovered on PATH or under Program Files. For a custom path:
+
+  .\packaging\windows\build-release.ps1 -IsccPath 'D:\Inno Setup\ISCC.exe'
+
+The version comes from VERSION. Tests, vet and JavaScript tests must pass.
+Completed releases appear in dist\mdview-<version>-windows-x64, including
+the installer, portable ZIP, installation guide, dependency notices,
+release metadata and SHA256SUMS. Existing releases are never overwritten;
+move the previous release aside before rebuilding the same version.
+Only an explicit payload allowlist is packaged; local settings, API keys,
+recordings, logs and build intermediates are excluded.
+
+Verify the finished release (requires no existing mdview installation):
+
+  powershell -NoProfile -ExecutionPolicy Bypass -File packaging\windows\verify-release.ps1
+
+Verification uses a temporary directory, installs and reinstalls silently,
+checks the shortcut and PATH, then uninstalls and checks PATH restoration.
+
+The installer uses a stable AppId for upgrades, installs for the current
+user, and maintains its own PATH entry without deleting other entries.
+The CLI retains its console so Ctrl+C and command output remain available.
+Artifacts are unsigned; sign with your organization's Authenticode
+certificate before publishing if a trusted publisher identity is required.

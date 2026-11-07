@@ -23,7 +23,7 @@ const mockVerboseJSON = `{
 
 func TestResolveOpenAIKey(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 
 	// 1) 환경변수 우선
 	t.Setenv(openaiKeyEnv, "env-key")

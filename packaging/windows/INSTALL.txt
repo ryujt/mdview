@@ -1,0 +1,49 @@
+mdview for Windows x64
+
+Windows 10/11 64-bit. Go and Node.js are not required on the user's PC.
+
+INSTALL
+Run mdview-<version>-windows-x64-setup.exe. Installation is per user and
+does not require administrator privileges. The default location is:
+  %LOCALAPPDATA%\Programs\mdview
+Start menu shortcuts and an uninstaller are included. Adding mdview to
+your user PATH is selected by default; the desktop shortcut is optional.
+Open a NEW terminal after installation for the PATH change to take effect.
+
+USE (PowerShell or Command Prompt)
+  cd C:\path\to\project
+  mdview
+  mdview README.md
+  mdview -port 9000 README.md
+  mdview --version
+The default browser opens automatically. Keep the console window open.
+Press Ctrl+C to stop the server. Start menu / desktop shortcuts initially
+show your Documents folder. Run from a terminal to browse another folder.
+Document rendering currently needs internet access for CDN resources.
+
+PORTABLE
+Extract mdview-<version>-windows-x64-portable.zip to a writable folder.
+Run .\mdview.exe from PowerShell. Portable use does not change your PATH,
+but settings and recordings still use the user directories listed below.
+
+RECORDING AND SETTINGS
+Allow microphone access for localhost in your browser when requested.
+Open the settings gear in the web page to save an optional OpenAI API key
+and transcription model. Without an API key, prompt.txt still contains
+the recorded document and web actions. OpenAI API use is billed separately.
+Settings:   %USERPROFILE%\.config\mdview\config.json
+Recordings: %APPDATA%\mdview\mdview-recordings
+Recordings are automatically removed 7 days after saving.
+To record interactions with other websites, install Google Chrome and,
+if needed, set MDVIEW_CHROME_PATH to the full path of chrome.exe.
+The browser toast reports completion; Windows system notifications are
+not currently supported. Completed transcripts are copied to the clipboard.
+
+UPDATE / UNINSTALL
+Close mdview and run the newer installer to update in place.
+Use Windows Settings > Apps > mdview > Uninstall to remove the program,
+shortcuts and the PATH entry added by Setup. Settings and recordings remain.
+Delete the user directories above yourself if you no longer need them.
+
+This build is not Authenticode-signed. Windows may show an unknown
+publisher / SmartScreen prompt. Verify the download's SHA256SUMS file.

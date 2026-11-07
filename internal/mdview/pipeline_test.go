@@ -50,7 +50,7 @@ func pipelineFixture(t *testing.T) string {
 // 키가 없어도 조작 기록만으로 prompt.txt가 만들어져야 한다.
 func TestPipelineWithoutTranscription(t *testing.T) {
 	t.Setenv(openaiKeyEnv, "")
-	t.Setenv("HOME", t.TempDir())
+	setTestHome(t, t.TempDir())
 	dir := pipelineFixture(t)
 
 	job := NewPipeline().Run(dir)
@@ -103,7 +103,7 @@ func TestPipelineWithExistingTranscription(t *testing.T) {
 
 func TestPipelineFailsWithoutMeta(t *testing.T) {
 	t.Setenv(openaiKeyEnv, "")
-	t.Setenv("HOME", t.TempDir())
+	setTestHome(t, t.TempDir())
 	dir := t.TempDir()
 	writeFixture(t, dir, "audio.webm", "FAKEAUDIO")
 	if job := NewPipeline().Run(dir); job.State != TranscribeStateError {
@@ -113,7 +113,7 @@ func TestPipelineFailsWithoutMeta(t *testing.T) {
 
 func TestTranscribeSkipReason(t *testing.T) {
 	t.Setenv(openaiKeyEnv, "")
-	t.Setenv("HOME", t.TempDir())
+	setTestHome(t, t.TempDir())
 	dir := pipelineFixture(t)
 	if reason := TranscribeSkipReason(dir, DefaultTranscribeModel); !strings.Contains(reason, "API 키") {
 		t.Errorf("키 없음 사유가 아님: %q", reason)

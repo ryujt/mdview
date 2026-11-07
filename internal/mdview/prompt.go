@@ -71,6 +71,10 @@ func BuildPrompt(meta *RecordingMeta, result *WhisperResult) string {
 	b.WriteString(promptHeadline(meta, result) + "\n")
 	b.WriteString("대상: " + promptTarget(meta) + "\n\n")
 	b.WriteString(promptHowToRead + "\n\n")
+	if speech := untimedSpeech(result); speech != "" {
+		b.WriteString("## 음성 전사 (시간 정보 없음)\n\n선택한 모델이 발화별 시간을 제공하지 않아 전체 전사문을 별도로 기록합니다.\n\n")
+		b.WriteString(speech + "\n\n")
+	}
 	b.WriteString(promptTimelineHeader + "\n\n")
 	for _, line := range timelineLines(meta, result) {
 		b.WriteString(line + "\n")
@@ -83,6 +87,9 @@ func promptHeadline(meta *RecordingMeta, result *WhisperResult) string {
 	speech := promptNoSpeech
 	if result != nil {
 		speech = fmt.Sprintf("발화 %d개", len(speechSegments(result)))
+		if untimedSpeech(result) != "" {
+			speech = "음성 전사 있음(시간 정보 없음)"
+		}
 	}
 	web := 0
 	for _, e := range meta.Events {

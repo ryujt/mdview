@@ -25,7 +25,7 @@ type webTestServer struct {
 func newWebTestServer(t *testing.T) *webTestServer {
 	t.Helper()
 	t.Setenv(openaiKeyEnv, "")
-	t.Setenv("HOME", t.TempDir())
+	setTestHome(t, t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	root := t.TempDir()
 	server, err := NewFolderServer(NewHub(), root)

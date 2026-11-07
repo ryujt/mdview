@@ -1,3 +1,4 @@
 {
-  "openai_api_key": "sk-..."
+  "openai_api_key": "",
+  "transcribe_model": "whisper-1"
 }
