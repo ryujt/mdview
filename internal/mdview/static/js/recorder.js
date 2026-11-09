@@ -653,7 +653,7 @@ function recordBlockCopy(blockEl, copiedText, state) {
 /** 클릭한 라인/블록을 포커스로 표시하고 기록한다. */
 function handleClick(e) {
   if (!recording) return;
-  if (e.target.closest('.copy-button')) return; // 복사 버튼은 copy 이벤트로만 기록
+  if (e.target.closest('.copy-button, .preview-media-copy')) return; // 복사 버튼은 copy 이벤트로만 기록
   const sel = window.getSelection();
   if (sel && !sel.isCollapsed) return; // 드래그 선택을 마친 클릭은 포커스로 취급하지 않음
   const state = ctx.getState();
@@ -764,7 +764,7 @@ function focusMarkdownBlock(blockEl, state) {
  */
 function handleDblClick(e) {
   if (!recording) return;
-  if (e.target.closest('.copy-button')) return;
+  if (e.target.closest('.copy-button, .preview-media-copy')) return;
   const state = ctx.getState();
   if (!state.file) return;
 

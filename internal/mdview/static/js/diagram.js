@@ -24,18 +24,20 @@ function createCopyButton(text) {
 
 export function processMermaidDiagram(codeElement) {
   const mermaidDiv = document.createElement('div');
+  mermaidDiv.dataset.lang = 'mermaid';
+  mermaidDiv.dataset.source = codeElement.textContent;
   mermaidDiv.classList.add('mermaid', 'my-6');
   mermaidDiv.textContent = codeElement.textContent;
-  const copyButton = createCopyButton(codeElement.textContent);
   const container = document.createElement('div');
   container.className = 'relative w-full';
   container.appendChild(mermaidDiv);
-  container.appendChild(copyButton);
   codeElement.parentNode.replaceChild(container, codeElement);
 }
 
 export function processJobFlowDiagram(codeElement) {
   const jobFlowDiv = document.createElement('div');
+  jobFlowDiv.dataset.lang = 'jobflow';
+  jobFlowDiv.dataset.source = codeElement.textContent;
   jobFlowDiv.classList.add('jobflow-diagram', 'my-6');
   const svg = JobFlowToSVG.generateSVG(codeElement.textContent);
   const viewBox = svg.match(/viewBox="([^"]+)"/)?.[1];
@@ -43,11 +45,9 @@ export function processJobFlowDiagram(codeElement) {
     ? svg.replace(/<svg[^>]*>/, `<svg viewBox="${viewBox}" class="w-full">`)
     : svg;
   jobFlowDiv.innerHTML = modifiedSvg;
-  const copyButton = createCopyButton(codeElement.textContent);
   const container = document.createElement('div');
   container.className = 'relative w-full';
   container.appendChild(jobFlowDiv);
-  container.appendChild(copyButton);
   codeElement.parentNode.replaceChild(container, codeElement);
 }
 
@@ -55,13 +55,13 @@ export function processNavigationDiagram(codeElement) {
   const navInput = codeElement.textContent;
   const mermaidCode = navigationToMermaid(navInput);
   const navDiv = document.createElement('div');
+  navDiv.dataset.lang = 'navigation';
+  navDiv.dataset.source = navInput;
   navDiv.classList.add('navigation-diagram', 'mermaid', 'my-6');
   navDiv.textContent = mermaidCode;
-  const copyButton = createCopyButton(navInput);
   const container = document.createElement('div');
   container.className = 'relative w-full';
   container.appendChild(navDiv);
-  container.appendChild(copyButton);
   codeElement.parentNode.replaceChild(container, codeElement);
 }
 
@@ -69,13 +69,13 @@ export function processStateDiagram(codeElement) {
   const stateInput = codeElement.textContent;
   const mermaidCode = stateToMermaid(stateInput);
   const stateDiv = document.createElement('div');
+  stateDiv.dataset.lang = 'state';
+  stateDiv.dataset.source = stateInput;
   stateDiv.classList.add('state-diagram', 'mermaid', 'my-6');
   stateDiv.textContent = mermaidCode;
-  const copyButton = createCopyButton(stateInput);
   const container = document.createElement('div');
   container.className = 'relative w-full';
   container.appendChild(stateDiv);
-  container.appendChild(copyButton);
   codeElement.parentNode.replaceChild(container, codeElement);
 }
 
@@ -87,13 +87,13 @@ export function processLayoutDiagram(codeElement) {
     document.head.appendChild(styleEl);
   }
   const layoutDiv = document.createElement('div');
+  layoutDiv.dataset.lang = 'layout';
+  layoutDiv.dataset.source = codeElement.textContent;
   layoutDiv.classList.add('layout-diagram', 'my-6');
   layoutDiv.innerHTML = LayoutToHTML.generateHTML(codeElement.textContent);
-  const copyButton = createCopyButton(codeElement.textContent);
   const container = document.createElement('div');
   container.className = 'relative w-full';
   container.appendChild(layoutDiv);
-  container.appendChild(copyButton);
   codeElement.parentNode.replaceChild(container, codeElement);
 }
 

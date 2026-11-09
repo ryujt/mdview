@@ -33,6 +33,16 @@ function ensureTextFenceTokenizer() {
   });
 }
 
+// 다이어그램 원본 코드(펜스 안 텍스트)를 보관해 다이어그램 복사 버튼이 사용한다.
+function sourceAttr(code, lang) {
+  const escape = (value) => String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  return ` data-source="${escape(code)}" data-lang="${escape(lang)}"`;
+}
+
 export function initMarkdownRenderer() {
   ensureTextFenceTokenizer();
   const renderer = new window.marked.Renderer();
@@ -47,28 +57,28 @@ export function initMarkdownRenderer() {
         const modifiedSvg = viewBox
           ? svg.replace(/<svg[^>]*>/, `<svg viewBox="${viewBox}" class="w-full">`)
           : svg;
-        return `<div class="jobflow-diagram my-6">${modifiedSvg}</div>`;
+        return `<div class="jobflow-diagram my-6"${sourceAttr(code, lang)}>${modifiedSvg}</div>`;
       } catch {
         return originalCodeRenderer(code, language);
       }
     }
     if (lang === 'layout') {
       const html = LayoutToHTML.generateHTML(code);
-      return `<div class="layout-diagram my-6">${html}</div>`;
+      return `<div class="layout-diagram my-6"${sourceAttr(code, lang)}>${html}</div>`;
     }
     if (lang === 'state') {
       const mermaidCode = stateToMermaid(code);
       const escaped = mermaidCode.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      return `<div class="state-diagram mermaid my-6">${escaped}</div>`;
+      return `<div class="state-diagram mermaid my-6"${sourceAttr(code, lang)}>${escaped}</div>`;
     }
     if (lang === 'navigation') {
       const mermaidCode = navigationToMermaid(code);
       const escaped = mermaidCode.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      return `<div class="navigation-diagram mermaid my-6">${escaped}</div>`;
+      return `<div class="navigation-diagram mermaid my-6"${sourceAttr(code, lang)}>${escaped}</div>`;
     }
     if (lang === 'mermaid') {
       const escaped = code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      return `<div class="mermaid my-6">${escaped}</div>`;
+      return `<div class="mermaid my-6"${sourceAttr(code, lang)}>${escaped}</div>`;
     }
     return originalCodeRenderer(code, language);
   };
