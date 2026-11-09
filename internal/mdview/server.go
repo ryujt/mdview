@@ -55,23 +55,12 @@ const (
 	treeInvalidPathMessage = "invalid path"
 	treeListFailedMessage  = "failed to list directory"
 
-	apiWebStartPath  = "/api/web/start"
-	apiWebStopPath   = "/api/web/stop"
-	apiWebCancelPath = "/api/web/cancel"
-	apiWebLivePath   = "/api/web/live"
-	apiWebOpenPath   = "/api/web/open"
-
 	secFetchSiteHeader = "Sec-Fetch-Site"
 	secFetchSiteSame   = "same-origin"
 
 	methodNotAllowedMessage = "method not allowed"
 	forbiddenOriginMessage  = "forbidden origin"
 	forbiddenHostMessage    = "forbidden host"
-
-	// /api/web/* JSON 본문 상한 (start·stop·open 모두 짧은 객체 하나다)
-	maxWebJSONBodyBytes = 1 << 10
-	// 브라우저가 보낸 녹음 시작 시각이 서버 시계와 이보다 멀면 서버 시각으로 대체한다
-	maxStartEpochSkew = time.Hour
 )
 
 var upgrader = websocket.Upgrader{
@@ -91,11 +80,11 @@ func isLocalHostname(hostname string) bool {
 // isSameOrigin은 Origin 헤더가 있으면 두 조건을 모두 요구한다.
 //  1. Origin의 호스트 이름이 로컬(localhost, 127.0.0.1, ::1)이다 — DNS 리바인딩 페이지(http://evil.com:8642)는
 //     Host 헤더까지 일치시킬 수 있으므로 호스트:포트 비교만으로는 막을 수 없다.
-//  2. Origin의 호스트:포트가 요청 대상(r.Host)과 같다 — 다른 localhost 포트의 페이지는 전용 Chrome 안에서
-//     흔히 열리는 대상이므로 호스트 이름만으로는 막을 수 없다.
+//  2. Origin의 호스트:포트가 요청 대상(r.Host)과 같다 — 같은 브라우저에서 열린 다른 localhost 포트의
+//     페이지(개발 서버 등)는 호스트 이름만으로는 막을 수 없다.
 //
 // Origin이 없는 요청(curl, 같은 문서의 일부 GET)은 통과시킨다 (Host 자체는 requireLocalHost가 검증한다).
-// WS(뷰어가 소스코드·설정 파일까지 브로드캐스트), 녹화 업로드, 웹 폴링이 모두 이 검증을 쓴다.
+// WS(뷰어가 소스코드·설정 파일까지 브로드캐스트), 녹화 업로드, 설정 API가 모두 이 검증을 쓴다.
 func isSameOrigin(r *http.Request) bool {
 	origin := r.Header.Get(originHeader)
 	if origin == "" {
@@ -131,9 +120,8 @@ func requireLocalHost(next http.Handler) http.Handler {
 	})
 }
 
-// hasLocalOrigin은 웹 세션 상태를 바꾸는 요청에 쓰는 더 엄격한 검증이다.
-// mdview는 적대적일 수 있는 임의 사이트를 같은 머신의 Chrome에 띄우므로
-// Origin 헤더가 존재하고 같은 오리진(로컬 호스트 + 호스트:포트 일치)일 것을 요구하며, Sec-Fetch-Site가 있으면 same-origin이어야 한다.
+// hasLocalOrigin은 설정 저장처럼 서버 상태를 바꾸는 요청에 쓰는 더 엄격한 검증이다.
+// 같은 브라우저의 다른 사이트가 보내는 요청을 막기 위해 Origin 헤더가 존재하고 같은 오리진(로컬 호스트 + 호스트:포트 일치)일 것을 요구하며, Sec-Fetch-Site가 있으면 same-origin이어야 한다.
 func hasLocalOrigin(r *http.Request) bool {
 	if r.Header.Get(originHeader) == "" {
 		return false
@@ -160,10 +148,6 @@ type Server struct {
 	jobMu          sync.Mutex
 	transcribeJobs map[string]*TranscribeJob
 
-	// web은 녹음 중 웹 페이지 조작 이벤트 버퍼이다 (WebCapture → WebSession.Add).
-	web *WebSession
-	// webOpener는 전용 Chrome 수명을 소유한다 (수집 payload는 web.Add로 간다).
-	webOpener *WebOpener
 	// pipeline은 녹화 저장 후 후처리(전사·프롬프트)이다.
 	pipeline   *Pipeline
 	completion *recordingCompletion
@@ -201,11 +185,9 @@ func newServer(mode Mode, hub *Hub) *Server {
 	s := &Server{
 		mode: mode, hub: hub,
 		transcribeJobs: map[string]*TranscribeJob{},
-		web:            NewWebSession(),
 		pipeline:       NewPipeline(),
 		completion:     newRecordingCompletion(),
 	}
-	s.webOpener = NewWebOpener(s.web.Add)
 	return s
 }
 
@@ -224,11 +206,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc(apiRecordingPath, s.handleRecording)
 	mux.HandleFunc(apiRecordingStatusPath, s.handleRecordingStatus)
 	mux.HandleFunc(apiRecordingFilePath, s.handleRecordingFile)
-	mux.HandleFunc(apiWebStartPath, s.handleWebStart)
-	mux.HandleFunc(apiWebStopPath, s.handleWebStop)
-	mux.HandleFunc(apiWebCancelPath, s.handleWebCancel)
-	mux.HandleFunc(apiWebLivePath, s.handleWebLive)
-	mux.HandleFunc(apiWebOpenPath, s.handleWebOpen)
 	return requireLocalHost(mux)
 }
 
@@ -248,7 +225,7 @@ func (s *Server) Start(listener net.Listener) {
 }
 
 // StopHTTP는 새 요청을 받지 않도록 HTTP 서버를 닫고, 진행 중인 요청을 timeout까지 기다린다.
-// 종료 경로에서 Chrome·후처리 정리 전에 호출해 그 사이 업로드·열기 요청이 들어오지 않게 한다. Start 전이면 아무것도 하지 않는다.
+// 종료 경로에서 후처리 정리 전에 호출해 그 사이 업로드 요청이 들어오지 않게 한다. Start 전이면 아무것도 하지 않는다.
 func (s *Server) StopHTTP(timeout time.Duration) {
 	s.httpMu.Lock()
 	server := s.httpServer
@@ -381,138 +358,6 @@ func (s *Server) handleSelect(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// handleWebOpen은 URL을 전용 Chrome 창에서 연다. Chrome 미설치·잘못된 URL은 400, 기동 실패는 500.
-func (s *Server) handleWebOpen(w http.ResponseWriter, r *http.Request) {
-	if !s.acceptWebStateChange(w, r) {
-		return
-	}
-	r.Body = http.MaxBytesReader(w, r.Body, maxWebJSONBodyBytes)
-	var body struct {
-		URL string `json:"url"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid json body", http.StatusBadRequest)
-		return
-	}
-	// 검증·정규화를 먼저 한다. 이후 로그·기록에는 원문 대신 정규화된 URL만 남긴다.
-	target, err := ValidateWebURL(body.URL)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	launched, err := s.webOpener.Open(target)
-	switch {
-	case errors.Is(err, ErrInvalidWebURL), errors.Is(err, ErrChromeUnavailable):
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	case err != nil:
-		logging.Error("[Web] 열기 실패 (%s): %v", target, err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	logging.Info("[Web] 열기: %s (launched=%v)", target, launched)
-	logging.LogProcessEvent("execution", "step_ok", "웹 열기: "+target, nil)
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "launched": launched, "url": target})
-}
-
-// CloseWeb은 전용 Chrome을 종료한다 (mdview 종료 경로).
-func (s *Server) CloseWeb() {
-	s.webOpener.Close()
-}
-
-// handleWebStart는 녹음 시작 시각(epoch ms)을 받아 웹 이벤트 수집을 시작한다. 기존 버퍼는 폐기된다.
-func (s *Server) handleWebStart(w http.ResponseWriter, r *http.Request) {
-	if !s.acceptWebStateChange(w, r) {
-		return
-	}
-	r.Body = http.MaxBytesReader(w, r.Body, maxWebJSONBodyBytes)
-	var body struct {
-		StartEpochMs int64 `json:"startEpochMs"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid json body", http.StatusBadRequest)
-		return
-	}
-	now := time.Now().UnixMilli()
-	if body.StartEpochMs <= 0 {
-		body.StartEpochMs = now
-	} else if skew := time.Duration(absInt64(body.StartEpochMs-now)) * time.Millisecond; skew > maxStartEpochSkew {
-		logging.Warn("[Web] startEpochMs가 서버 시각과 %s 차이 — 서버 시각으로 대체 (받은 값 %d)", skew, body.StartEpochMs)
-		body.StartEpochMs = now
-	}
-	s.web.Start(body.StartEpochMs)
-	logging.Info("[Web] 수집 시작 (startEpochMs=%d)", body.StartEpochMs)
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
-}
-
-// handleWebStop은 정지 시점에 수집을 멈추고 t를 녹화 길이 안으로 클램프한다.
-func (s *Server) handleWebStop(w http.ResponseWriter, r *http.Request) {
-	if !s.acceptWebStateChange(w, r) {
-		return
-	}
-	r.Body = http.MaxBytesReader(w, r.Body, maxWebJSONBodyBytes)
-	var body struct {
-		DurationMs int64 `json:"durationMs"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid json body", http.StatusBadRequest)
-		return
-	}
-	count := s.web.Freeze(body.DurationMs)
-	logging.Info("[Web] 수집 정지 (durationMs=%d, 이벤트 %d개)", body.DurationMs, count)
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "events": count})
-}
-
-// handleWebCancel은 녹음 중이 아닐 때 남은 버퍼만 비운다.
-// 웹 버퍼는 프로세스 전역이고 서버당 녹음은 하나뿐이므로, 다른 탭의 이탈이 진행 중인 녹음을
-// 지우지 못하도록 녹음 중 cancel은 무시한다.
-func (s *Server) handleWebCancel(w http.ResponseWriter, r *http.Request) {
-	if !s.acceptWebStateChange(w, r) {
-		return
-	}
-	if recording, _ := s.web.Live(); recording {
-		logging.Warn("[Web] 녹음 중 cancel 무시")
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-	s.web.Reset()
-	w.WriteHeader(http.StatusNoContent)
-}
-
-// handleWebLive는 녹음 중 1초 폴링에 Chrome 상태와 수집 건수를 답한다.
-func (s *Server) handleWebLive(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, methodNotAllowedMessage, http.StatusMethodNotAllowed)
-		return
-	}
-	if !isSameOrigin(r) {
-		http.Error(w, forbiddenOriginMessage, http.StatusForbidden)
-		return
-	}
-	recording, events := s.web.Live()
-	writeJSON(w, http.StatusOK, map[string]any{"chrome": s.webAlive(), "recording": recording, "events": events})
-}
-
-// webAlive는 Chrome 창이 떠 있는지 반환한다.
-func (s *Server) webAlive() bool {
-	return s.webOpener.Alive()
-}
-
-// acceptWebStateChange는 웹 세션 상태 변경 요청의 메서드와 오리진을 검사한다.
-func (s *Server) acceptWebStateChange(w http.ResponseWriter, r *http.Request) bool {
-	if r.Method != http.MethodPost {
-		http.Error(w, methodNotAllowedMessage, http.StatusMethodNotAllowed)
-		return false
-	}
-	if !hasLocalOrigin(r) {
-		logging.Warn("[Web] 상태 변경 요청 거부: origin=%q site=%q path=%s",
-			r.Header.Get(originHeader), r.Header.Get(secFetchSiteHeader), r.URL.Path)
-		http.Error(w, forbiddenOriginMessage, http.StatusForbidden)
-		return false
-	}
-	return true
-}
-
 // handleRecording은 브라우저가 녹화 종료 시 업로드하는 오디오+이벤트 메타를 저장한다.
 // 저장 위치는 folder 모드면 루트, file 모드면 대상 파일의 디렉토리이다.
 func (s *Server) handleRecording(w http.ResponseWriter, r *http.Request) {
@@ -546,11 +391,6 @@ func (s *Server) handleRecording(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 웹 이벤트의 소유자는 서버다. 스냅샷과 동시에 수집이 멈춘다 (/api/web/stop이 실패했어도).
-	// 버퍼는 저장이 성공한 뒤에만 비워, 저장 실패 후 재업로드가 같은 이벤트를 다시 병합할 수 있게 한다.
-	webEvents, dropped := s.web.Snapshot(metaDurationMs(meta))
-	mergeWebEvents(meta, webEvents, dropped)
-
 	base, err := recordingBaseDir()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -566,8 +406,6 @@ func (s *Server) handleRecording(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	s.web.Clear()
-
 	logging.Info("[Recording] 저장: %s (%s %d bytes, 이벤트 %d개)", dir, audioName, header.Size, eventCount)
 	warnIfAudioUnusable(filepath.Join(dir, audioName))
 	logging.LogRecordingUpload(string(s.mode), dir, audioName, header.Size, eventCount, eventsSummary, "")
@@ -582,21 +420,6 @@ func (s *Server) handleRecording(w http.ResponseWriter, r *http.Request) {
 		ID:           filepath.Base(dir),
 		Transcribing: true,
 	})
-}
-
-// metaDurationMs는 업로드 meta의 녹화 길이(ms)를 읽는다. 없거나 숫자가 아니면 0.
-func metaDurationMs(meta map[string]any) int64 {
-	if v, ok := meta["durationMs"].(float64); ok {
-		return int64(v)
-	}
-	return 0
-}
-
-func absInt64(v int64) int64 {
-	if v < 0 {
-		return -v
-	}
-	return v
 }
 
 // startPipeline은 후처리를 백그라운드로 시작한다 (업로드 응답은 즉시 돌려준다).

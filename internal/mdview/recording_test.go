@@ -318,7 +318,7 @@ func TestHandleRecordingRejections(t *testing.T) {
 		t.Errorf("cross-origin status = %d, want 403", res.StatusCode)
 	}
 
-	// 같은 호스트의 다른 포트(전용 Chrome의 개발 서버 등)에서 온 업로드 거부
+	// 같은 호스트의 다른 포트(로컬 개발 서버 등)에서 온 업로드 거부
 	body, contentType = buildRecordingForm(t, "X", "audio/webm", `{}`)
 	req, _ = http.NewRequest(http.MethodPost, ts.URL+apiRecordingPath, body)
 	req.Header.Set("Content-Type", contentType)

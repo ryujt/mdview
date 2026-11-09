@@ -19,11 +19,6 @@
 const API_RECORDING_PATH = '/api/recording';
 const API_RECORDING_STATUS_PATH = '/api/recording/status';
 const API_RECORDING_FILE_PATH = '/api/recording/file';
-const API_WEB_START_PATH = '/api/web/start';
-const API_WEB_STOP_PATH = '/api/web/stop';
-const API_WEB_LIVE_PATH = '/api/web/live';
-const WEB_LIVE_POLL_MS = 1000;
-const WEB_API_TIMEOUT_MS = 3000;
 const STATUS_POLL_MS = 2000;
 const STATUS_POLL_MAX_MS = 10 * 60 * 1000;
 const JOB_DONE_HIDE_MS = 8000;
@@ -64,11 +59,7 @@ let toastEl = null;
 let toastTimer = null;
 let jobTimer = null;         // 전사 상태 폴링 타이머
 let activeDeviceLabel = '';  // 현재 녹음에 사용된 입력 장치 이름
-let webPollGen = 0;        // 웹 폴링 세대 (정지 후 늦게 끝난 tick의 재예약 방지)
-let webLiveTimer = null;   // 녹음 중 웹 이벤트 수 폴링 타이머
-let webChrome = false;     // 전용 Chrome 창이 떠 있는지 (마지막 폴링 기준)
-let webEventCount = 0;     // 서버가 수집한 웹 이벤트 수 (마지막 폴링 기준)
-let uploading = false;     // 이전 녹화를 업로드하는 중인지 (새 녹음이 서버 웹 이벤트 버퍼를 지우지 않게 막는다)
+let uploading = false;     // 이전 녹화를 업로드하는 중인지 (업로드가 끝날 때까지 새 녹음 시작을 막는다)
 
 /**
  * 녹화 기능을 초기화한다.
@@ -163,12 +154,6 @@ async function populateDevices() {
 export function noteFileOpen(file) {
   if (!recording || !file) return;
   pushEvent({ type: 'open', file });
-}
-
-/** 툴바에서 웹 페이지를 열었을 때 호출된다 (webopen.js). 녹음 중이면 web-open 이벤트로 기록한다. */
-export function noteWebOpen(url) {
-  if (!recording || !url) return;
-  pushEvent({ type: 'web-open', url });
 }
 
 function toggleRecording() {
@@ -270,10 +255,7 @@ async function startRecording() {
   events = [];
   startedAt = new Date().toISOString();
   t0 = performance.now();
-  const startEpochMs = Date.now();
   recording = true;
-  notifyWebStart(startEpochMs);
-  startWebLivePoll();
 
   mediaRecorder.addEventListener('dataavailable', (e) => {
     if (e.data && e.data.size > 0) chunks.push(e.data);
@@ -340,10 +322,9 @@ function stopRecording() {
   mediaRecorder.stop(); // → 'stop' 이벤트에서 finalizeRecording 실행
 }
 
-async function finalizeRecording() {
+function finalizeRecording() {
   const durationMs = elapsedMs();
   recording = false;
-  stopWebLivePoll();
   stopLevelMeter();
   if (mediaStream) {
     mediaStream.getTracks().forEach((t) => t.stop());
@@ -365,12 +346,7 @@ async function finalizeRecording() {
     return;
   }
   // 메타는 대기 전에 확정한다. 대기 중 새 녹음이 시작되면 events·startedAt·장치가 초기화되기 때문이다.
-  // 이 선확정은 클라이언트 meta만 보호한다. 서버 웹 이벤트 버퍼는 새 녹음의 web/start가 비우므로,
-  // 정지 알림 대기부터 업로드 종료까지 녹음 버튼을 비활성화해(uploading) 새 녹음 시작을 막는다.
   const meta = buildMeta(durationMs);
-  uploading = true;
-  ui.button.disabled = true;
-  await notifyWebStop(durationMs);
   uploadRecording(blob, meta);
 }
 
@@ -419,71 +395,6 @@ async function uploadRecording(blob, meta) {
   } finally {
     uploading = false;
     ui.button.disabled = false;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// 웹 페이지 조작 수집 연동 (서버 WebSession)
-// ---------------------------------------------------------------------------
-
-/** 녹음 시작 시각(epoch ms)을 서버에 알린다. Chrome이 아직 없어도 보낸다 (세션 상태만 켜짐). */
-async function notifyWebStart(startEpochMs) {
-  try {
-    const res = await fetch(API_WEB_START_PATH, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ startEpochMs }),
-      signal: AbortSignal.timeout(WEB_API_TIMEOUT_MS),
-    });
-    if (!res.ok) console.warn('웹 수집 시작 알림 거부:', res.status, (await res.text()).slice(0, ERROR_TEXT_LIMIT));
-  } catch (err) {
-    console.warn('웹 수집 시작 알림 실패:', err);
-  }
-}
-
-/** 정지 시점을 서버에 알린다. 실패해도 업로드는 계속한다 (업로드가 수집을 멈춘다). */
-async function notifyWebStop(durationMs) {
-  try {
-    const res = await fetch(API_WEB_STOP_PATH, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ durationMs }),
-      signal: AbortSignal.timeout(WEB_API_TIMEOUT_MS),
-    });
-    if (!res.ok) console.warn('웹 수집 정지 알림 거부:', res.status, (await res.text()).slice(0, ERROR_TEXT_LIMIT));
-  } catch (err) {
-    console.warn('웹 수집 정지 알림 실패:', err);
-  }
-}
-
-/** 녹음 중 1초마다 Chrome 상태와 웹 이벤트 수를 읽어 칩을 갱신한다. */
-function startWebLivePoll() {
-  stopWebLivePoll();
-  webChrome = false;
-  webEventCount = 0;
-  const gen = ++webPollGen;
-  const tick = async () => {
-    try {
-      const res = await fetch(API_WEB_LIVE_PATH);
-      if (res.ok) {
-        const live = await res.json();
-        webChrome = Boolean(live.chrome);
-        webEventCount = Number(live.events) || 0;
-        updateEventCount();
-      }
-    } catch {
-      /* 다음 폴링에서 재시도 */
-    }
-    if (recording && gen === webPollGen) webLiveTimer = setTimeout(tick, WEB_LIVE_POLL_MS);
-  };
-  tick();
-}
-
-function stopWebLivePoll() {
-  webPollGen++;
-  if (webLiveTimer) {
-    clearTimeout(webLiveTimer);
-    webLiveTimer = null;
   }
 }
 
@@ -1116,8 +1027,7 @@ function updateTimer() {
 
 function updateEventCount() {
   if (!recording) return;
-  const web = webChrome || webEventCount > 0 ? ` · 웹 ${webEventCount}` : '';
-  ui.eventsCount.textContent = `이벤트 ${events.length}${web}`;
+  ui.eventsCount.textContent = `이벤트 ${events.length}`;
 }
 
 function formatClock(ms) {
@@ -1133,10 +1043,6 @@ function handleBeforeUnload(e) {
   if (!recording) return;
   e.preventDefault();
   e.returnValue = ''; // 브라우저 기본 확인 대화상자 표시
-}
-
-export function isRecording() {
-  return recording;
 }
 
 export function showToast(message, { error = false, download = false, action = null } = {}) {

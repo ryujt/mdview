@@ -5,9 +5,9 @@ import { renderHTML, isHtmlPath } from './html-viewer.js';
 import { initSidebar, highlightFile, revealFile } from './sidebar.js';
 import { initSidebarResizer } from './sidebar-resizer.js';
 import { initRecorder, noteFileOpen } from './recorder.js';
-import { initWebOpen } from './webopen.js';
 import { initPreviewMediaViewer } from './preview-media-viewer.js';
 import { initSettings } from './settings.js';
+import { initPdfExport } from './pdf-export.js';
 
 const WS_PROTOCOL = 'ws:';
 const API_MODE_PATH = '/api/mode';
@@ -108,6 +108,14 @@ function activeDocumentUrl(cacheBust) {
   const rel = folderMode ? activeRelPath : fileBaseName(activeFileName);
   const encoded = (rel || '').split('/').map(encodeURIComponent).join('/');
   return `/${encoded}?v=${cacheBust}`;
+}
+
+// PDF 내보내기 대상: 표시 중인 문서가 없으면 null.
+function exportTarget() {
+  if (!activeFileName || preview.hidden) return null;
+  if (isHtmlPath(activeFileName)) return { kind: 'html', name: activeFileName, url: activeDocumentUrl(htmlCacheBust) };
+  if (isPdfPath(activeFileName)) return { kind: 'pdf', name: activeFileName, url: activeDocumentUrl(pdfCacheBust) };
+  return { kind: 'page', name: activeFileName };
 }
 
 function fileBaseName(p) {
@@ -350,7 +358,7 @@ async function bootstrap() {
       if (folderMode) selectFile(relPath);
     },
   });
-  initWebOpen();
+  initPdfExport({ getTarget: exportTarget });
 
   if (info.mode === 'file') {
     activeFileName = info.filename;

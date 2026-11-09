@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/ryu/tools-camp/cli/mdview/internal/mdview/logging"
 )
@@ -101,4 +102,14 @@ func loadExistingWhisperResult(dir string) *WhisperResult {
 		return nil
 	}
 	return result
+}
+
+// truncateRunes는 앞뒤 공백을 걷어 낸 뒤 rune 단위로 max까지만 남긴다.
+func truncateRunes(s string, max int) string {
+	s = strings.TrimSpace(s)
+	runes := []rune(s)
+	if len(runes) <= max {
+		return s
+	}
+	return string(runes[:max])
 }

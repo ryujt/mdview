@@ -247,85 +247,34 @@ func TestTranscribeRecordingWithoutEvents(t *testing.T) {
 	}
 }
 
-// web-* 이벤트는 action 이름이 문서 이벤트와 같은 어휘(open/click/select/copy)로 바뀌고
-// url·selector 등 웹 필드가 보존되어야 한다.
-func TestBuildTranscriptJSONWebEvents(t *testing.T) {
-	meta := &RecordingMeta{
-		Version: 1, Mode: "folder", Root: "/proj", DurationMs: 30000,
-		Events: []RecordingEvent{
-			{T: 1000, Type: WebEventOpen, URL: "https://example.com/dash"},
-			{T: 2000, Type: WebEventClick, URL: "https://example.com/dash", Title: "Dash",
-				Selector: "main > span.v", Tag: "span", ID: "mau", Classes: "v hi",
-				Text: "12,345", Heading: "핵심 지표", Context: "월간 활성 사용자 12,345"},
-			{T: 3000, Type: WebEventDblClick, URL: "https://example.com/dash", Tag: "p", Selection: "활성"},
-			{T: 4000, Type: WebEventCopy, URL: "https://example.com/dash", Tag: "p", Selection: "12,345"},
-		},
+// 이전 버전 녹화의 events.json에 남은 웹 페이지 조작(web-*) 이벤트와 알 수 없는 타입은
+// 오류 없이 타임라인에서 제외되고, 웹 전용 필드는 출력에 나타나지 않는다.
+func TestBuildTranscriptJSONSkipsUnknownEvents(t *testing.T) {
+	raw := `{"version":1,"mode":"folder","root":"/proj","durationMs":30000,"droppedWebEvents":2,"events":[` +
+		`{"t":1000,"type":"web-open","url":"https://example.com/dash"},` +
+		`{"t":2000,"type":"web-click","url":"https://example.com/dash","selector":"main > span","tag":"span","text":"12,345"},` +
+		`{"t":2500,"type":"zoom","file":"a.md"},` +
+		`{"t":3000,"type":"focus","file":"a.md","line":3,"lineEnd":3,"text":"본문"}]}`
+	var meta RecordingMeta
+	if err := json.Unmarshal([]byte(raw), &meta); err != nil {
+		t.Fatalf("events.json 파싱 실패: %v", err)
 	}
-	data, err := buildTranscriptJSON(meta, &WhisperResult{}, DefaultTranscribeModel)
+	data, err := buildTranscriptJSON(&meta, &WhisperResult{}, DefaultTranscribeModel)
 	if err != nil {
 		t.Fatalf("buildTranscriptJSON error: %v", err)
 	}
 	var doc struct {
-		Guide struct {
-			Fields string `json:"fields"`
-		} `json:"guide"`
 		Timeline []map[string]any `json:"timeline"`
 	}
 	if err := json.Unmarshal(data, &doc); err != nil {
 		t.Fatalf("파싱 실패: %v\n%s", err, data)
 	}
-	wantActions := []string{"open", "click", "select", "copy"}
-	if len(doc.Timeline) != len(wantActions) {
-		t.Fatalf("timeline 길이 = %d, want %d\n%s", len(doc.Timeline), len(wantActions), data)
+	if len(doc.Timeline) != 1 || doc.Timeline[0]["action"] != "click" || doc.Timeline[0]["file"] != "a.md" {
+		t.Fatalf("timeline = %v, want 문서 클릭 1개", doc.Timeline)
 	}
-	for i, want := range wantActions {
-		if doc.Timeline[i]["action"] != want {
-			t.Errorf("timeline[%d].action = %v, want %s", i, doc.Timeline[i]["action"], want)
+	for _, key := range []string{"url", "selector", "tag", "droppedWebEvents"} {
+		if strings.Contains(string(data), `"`+key+`"`) {
+			t.Errorf("transcript.json에 웹 필드 %q가 남음:\n%s", key, data)
 		}
-		if doc.Timeline[i]["url"] != "https://example.com/dash" {
-			t.Errorf("timeline[%d].url = %v", i, doc.Timeline[i]["url"])
-		}
-		if _, has := doc.Timeline[i]["file"]; has {
-			t.Errorf("timeline[%d]에 file 필드가 있음", i)
-		}
-	}
-	click := doc.Timeline[1]
-	for key, want := range map[string]string{
-		"title": "Dash", "selector": "main > span.v", "tag": "span", "id": "mau",
-		"classes": "v hi", "text": "12,345", "heading": "핵심 지표", "context": "월간 활성 사용자 12,345",
-	} {
-		if click[key] != want {
-			t.Errorf("click.%s = %v, want %q", key, click[key], want)
-		}
-	}
-	if !strings.Contains(doc.Guide.Fields, "url") {
-		t.Errorf("guide.fields에 웹 이벤트 설명이 없음: %s", doc.Guide.Fields)
-	}
-}
-
-func TestBuildTranscriptJSONDocEventsHaveNoWebFields(t *testing.T) {
-	data, err := buildTranscriptJSON(fixtureMeta(), fixtureResult(), localWhisperDefault)
-	if err != nil {
-		t.Fatalf("buildTranscriptJSON error: %v", err)
-	}
-	var doc struct {
-		Timeline []map[string]any `json:"timeline"`
-	}
-	if err := json.Unmarshal(data, &doc); err != nil {
-		t.Fatalf("파싱 실패: %v", err)
-	}
-	for i, entry := range doc.Timeline {
-		for _, key := range []string{"url", "title", "selector", "tag", "id", "classes", "heading", "context"} {
-			if _, has := entry[key]; has {
-				t.Errorf("timeline[%d]에 웹 필드 %q가 있음", i, key)
-			}
-		}
-	}
-	var top map[string]any
-	if err := json.Unmarshal(data, &top); err != nil {
-		t.Fatalf("파싱 실패: %v", err)
-	}
-	if _, has := top["droppedWebEvents"]; has {
-		t.Error("최상위에 droppedWebEvents가 있음")
 	}
 }

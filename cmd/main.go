@@ -310,13 +310,11 @@ func toRelSlash(root, abs string) string {
 	return filepath.ToSlash(rel)
 }
 
-// shutdown은 HTTP 서버를 먼저 닫아 새 업로드·열기 요청을 막고, 전용 Chrome을 닫은 뒤
-// 진행 중인 후처리(전사·프롬프트)를 기다린다. HTTP를 먼저 닫아야 정리 도중 Chrome이 다시 기동되거나
-// WaitPipelines 이후에 새 후처리가 시작되지 않는다.
+// shutdown은 HTTP 서버를 먼저 닫아 새 업로드 요청을 막은 뒤 진행 중인 후처리(전사·프롬프트)를 기다린다.
+// HTTP를 먼저 닫아야 WaitPipelines 이후에 새 후처리가 시작되지 않는다.
 // 녹음 중이던 오디오는 브라우저 메모리에만 있으므로 여기서 구할 수 없다.
 func shutdown(server *mdview.Server) {
 	server.StopHTTP(httpShutdownTimeout)
-	server.CloseWeb()
 	if server.PipelinesPending() {
 		fmt.Println("후처리를 마무리하는 중입니다… (전사·프롬프트 생성)")
 	}

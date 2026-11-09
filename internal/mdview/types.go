@@ -49,15 +49,6 @@ const (
 	TranscribeStateError   = "error"
 )
 
-// 웹 페이지 조작 이벤트 타입 (events.json의 type 값).
-// 문서 이벤트(open/focus/word/copy)와 구분하기 위해 web- 접두를 둔다.
-const (
-	WebEventOpen     = "web-open"
-	WebEventClick    = "web-click"
-	WebEventDblClick = "web-dblclick"
-	WebEventCopy     = "web-copy"
-)
-
 // TranscribeJob은 녹화 자동 전사 작업의 상태 DTO이다 (/api/recording/status).
 type TranscribeJob struct {
 	ID    string `json:"id"`

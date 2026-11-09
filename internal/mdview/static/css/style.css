@@ -322,53 +322,6 @@ body:not(.has-sidebar) #preview { padding-bottom: 64px; }
   cursor: default;
 }
 
-/* 웹 페이지 열기 (전용 Chrome 창) */
-#web-url {
-  width: 220px;
-  height: 28px;
-  padding: 0 8px;
-  font: inherit;
-  font-size: 12px;
-  color: #24292e;
-  background: #ffffff;
-  border: 1px solid #e1e4e8;
-  border-radius: 6px;
-}
-
-#web-url:focus {
-  outline: none;
-  border-color: #0366d6;
-  box-shadow: 0 0 0 2px rgba(3, 102, 214, 0.2);
-}
-
-#web-open {
-  height: 28px;
-  padding: 0 10px;
-  font: inherit;
-  font-size: 12px;
-  color: #24292e;
-  background: #ffffff;
-  border: 1px solid #e1e4e8;
-  border-radius: 6px;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background 0.15s ease, border-color 0.15s ease;
-}
-
-#web-open:hover {
-  background: #f3f4f6;
-  border-color: #0366d6;
-}
-
-#web-open:disabled {
-  opacity: 0.55;
-  cursor: default;
-}
-
-@media (max-width: 768px) {
-  #web-url { width: 140px; }
-}
-
 /* 백그라운드 작업(업로드/전사) 상태 칩 */
 #job-status {
   display: inline-flex;
@@ -421,7 +374,7 @@ body:not(.has-sidebar) #preview { padding-bottom: 64px; }
   border-color: #d73a49;
 }
 
-/* 이전 녹화 업로드 중에는 새 녹음을 시작할 수 없다 (서버 웹 이벤트 버퍼 보호) */
+/* 이전 녹화 업로드 중에는 새 녹음을 시작할 수 없다 */
 #record-button:disabled {
   opacity: 0.55;
   cursor: default;
@@ -986,3 +939,110 @@ body.html-preview #preview {
 .preview-media-stage > .layout-diagram { width: 100%; margin: auto; }
 @media (hover: none) { .preview-media-expand { opacity: 1; } }
 @media print { .preview-media-expand, .preview-media-dialog { display: none; } }
+
+/* 내보내기 메뉴 (PDF 저장) */
+#export-menu-wrap { position: relative; }
+#export-menu-button {
+  height: 28px;
+  padding: 0 10px;
+  font: inherit;
+  font-size: 12px;
+  color: #24292e;
+  background: #ffffff;
+  border: 1px solid #e1e4e8;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+#export-menu-button:hover, #export-menu-button[aria-expanded="true"] { background: #f3f4f6; border-color: #0366d6; }
+#export-menu-button:focus-visible, #export-pdf:focus-visible { outline: 2px solid #b6d8ff; outline-offset: 1px; }
+#export-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 200;
+  min-width: 170px;
+  padding: 4px;
+  background: #ffffff;
+  border: 1px solid #d1d9e0;
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+}
+#export-menu[hidden] { display: none; }
+#export-pdf {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #24292e;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+}
+#export-pdf:hover:not([aria-disabled="true"]) { background: #0366d6; color: #ffffff; }
+#export-pdf[aria-disabled="true"] { color: #8c959f; cursor: default; }
+
+/* 인쇄 동안만 만드는 코드뷰어 대체 표 (화면에서는 숨김) */
+#preview .code-print { display: none; }
+
+/* HTML PDF 저장용 인쇄 프레임: 화면에는 보이지 않게 둔다 */
+#pdf-export-frame {
+  position: fixed;
+  left: -10000px;
+  top: 0;
+  width: 800px;
+  height: 600px;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* PDF 저장(인쇄): 뷰어 UI를 숨기고 문서 본문만 페이지 폭에 맞춘다 */
+@media print {
+  #sidebar, #sidebar-resizer, #header-bar, #empty-state, #settings-button, #settings-dialog,
+  #record-toast, #pdf-export-frame, .copy-button, #preview .code-focus-line, #preview .pdf-focus-point {
+    display: none !important;
+  }
+  body { background: #ffffff; }
+  #layout, #content { display: block; min-height: 0; }
+  main { padding: 0; }
+  body:not(.has-sidebar) #preview { padding-bottom: 0; }
+  #preview .focus-block { background: none; outline: none; }
+  /* 화면에서는 가로 스크롤되는 코드·표를 페이지 안에서 줄바꿈한다 */
+  #preview pre, #preview .code-viewer { overflow: visible; }
+  /* break-all: 들여쓰기 뒤 긴 토큰이 다음 행으로 통째로 밀려 들여쓰기만 남는 것을 막는다 */
+  #preview pre code { white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-all; }
+  #preview .code-viewer { display: none !important; }
+  #preview .code-print {
+    display: table;
+    width: 100%;
+    border-collapse: collapse;
+    border: 1px solid #d1d9e0;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 11px;
+    line-height: 1.5;
+  }
+  #preview .code-print tr { break-inside: avoid; background: transparent; }
+  #preview .code-print td { padding: 0; border: 0; vertical-align: top; }
+  #preview .code-print-num {
+    width: 1%;
+    padding: 0 10px !important;
+    text-align: right;
+    color: #8c959f;
+    border-right: 1px solid #e1e4e8 !important;
+    white-space: nowrap;
+  }
+  #preview .code-print-line { padding: 0 12px !important; background: transparent; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-all; }
+  /* 넓은 표는 셀 안에서 줄바꿈해 페이지 폭 안에 담는다 */
+  #preview table { display: table; overflow: visible; max-width: 100%; }
+  #preview th, #preview td { overflow-wrap: anywhere; }
+  #preview h1, #preview h2, #preview h3, #preview h4, #preview h5, #preview h6 { break-after: avoid; }
+  #preview pre, #preview blockquote, #preview tr, #preview img, #preview svg, #preview .mermaid, #preview figure { break-inside: avoid; }
+  /* !important를 쓰지 않아 mermaid가 SVG에 넣은 인라인 max-width(원래 크기)를 유지한다. 작은 다이어그램이 페이지 폭으로 커지지 않는다 */
+  #preview img, #preview svg { max-width: 100%; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

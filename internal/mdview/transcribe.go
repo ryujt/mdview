@@ -74,15 +74,6 @@ type RecordingEvent struct {
 	Selection string  `json:"selection,omitempty"`
 	Approx    bool    `json:"approx,omitempty"`
 	PDF       *PDFRef `json:"pdf,omitempty"`
-	// 웹 페이지 조작(web-*) 전용 필드. 문서 이벤트에서는 비어 있다.
-	URL      string `json:"url,omitempty"`
-	Title    string `json:"title,omitempty"`
-	Selector string `json:"selector,omitempty"`
-	Tag      string `json:"tag,omitempty"`
-	ID       string `json:"id,omitempty"`
-	Classes  string `json:"classes,omitempty"`
-	Heading  string `json:"heading,omitempty"`
-	Context  string `json:"context,omitempty"`
 }
 
 // PDFRef는 PDF 문서 내 참조 위치이다. 라인 번호가 없는 PDF는 페이지 번호와
@@ -96,17 +87,15 @@ type PDFRef struct {
 
 // RecordingMeta는 events.json 전체 구조이다.
 type RecordingMeta struct {
-	Version    int    `json:"version"`
-	Mode       string `json:"mode"`
-	Root       string `json:"root,omitempty"`
-	File       string `json:"file,omitempty"`
-	StartedAt  string `json:"startedAt"`
-	SavedAt    string `json:"savedAt"`
-	DurationMs int64  `json:"durationMs"`
-	Audio      string `json:"audio"`
-	// DroppedWebEvents는 검증·상한으로 폐기된 웹 이벤트 수이다.
-	DroppedWebEvents int              `json:"droppedWebEvents,omitempty"`
-	Events           []RecordingEvent `json:"events"`
+	Version    int              `json:"version"`
+	Mode       string           `json:"mode"`
+	Root       string           `json:"root,omitempty"`
+	File       string           `json:"file,omitempty"`
+	StartedAt  string           `json:"startedAt"`
+	SavedAt    string           `json:"savedAt"`
+	DurationMs int64            `json:"durationMs"`
+	Audio      string           `json:"audio"`
+	Events     []RecordingEvent `json:"events"`
 }
 
 // TranscribeRecording은 녹화 디렉토리의 오디오를 전사해 transcript.json을 생성하는
@@ -511,27 +500,16 @@ type actionEntry struct {
 	Text      string  `json:"text,omitempty"`
 	Selection string  `json:"selection,omitempty"`
 	PDF       *PDFRef `json:"pdf,omitempty"`
-	URL       string  `json:"url,omitempty"`
-	Title     string  `json:"title,omitempty"`
-	Selector  string  `json:"selector,omitempty"`
-	Tag       string  `json:"tag,omitempty"`
-	ID        string  `json:"id,omitempty"`
-	Classes   string  `json:"classes,omitempty"`
-	Heading   string  `json:"heading,omitempty"`
-	Context   string  `json:"context,omitempty"`
 }
 
 // actionNameByEventType은 events.json의 내부 이벤트 타입을
 // 사용자 행동이 그대로 드러나는 액션 이름으로 바꾼다.
+// 여기에 없는 타입(예: 이전 버전 녹화에 남은 웹 페이지 조작 이벤트)은 타임라인에서 제외한다.
 var actionNameByEventType = map[string]string{
-	"open":           "open",
-	"focus":          "click",
-	"word":           "select",
-	"copy":           "copy",
-	WebEventOpen:     "open",
-	WebEventClick:    "click",
-	WebEventDblClick: "select",
-	WebEventCopy:     "copy",
+	"open":  "open",
+	"focus": "click",
+	"word":  "select",
+	"copy":  "copy",
 }
 
 func transcriptGuideText() transcriptGuide {
@@ -539,18 +517,15 @@ func transcriptGuideText() transcriptGuide {
 		Timeline: "발화(kind=speech)와 사용자 상호작용(kind=action)을 시간순으로 병합한 목록. 모든 시간은 녹음 시작 기준 ms.",
 		Speech:   "오디오에서 전사된 발화 구간. text가 실제 발화 내용이다 (startMs~endMs).",
 		Actions: map[string]string{
-			"open":   "사용자가 파일을 열람함 (url이 있으면 웹 페이지를 열어 들어감)",
-			"click":  "사용자가 본문 라인/블록을 클릭해 가리킴 (text=해당 위치의 원문). 웹이면 클릭한 요소 (text=요소 텍스트, selector/tag/id/classes=요소 정보)",
-			"select": "사용자가 더블클릭으로 단어/텍스트를 선택해 지칭함 (text=선택된 문자열). 웹이면 selection=선택 문자열",
-			"copy":   "사용자가 텍스트를 클립보드로 복사함 (text=원본 라인 전체, selection=실제 복사된 문자열). 웹이면 selection=복사 시점의 선택 문자열",
+			"open":   "사용자가 파일을 열람함",
+			"click":  "사용자가 본문 라인/블록을 클릭해 가리킴 (text=해당 위치의 원문)",
+			"select": "사용자가 더블클릭으로 단어/텍스트를 선택해 지칭함 (text=선택된 문자열)",
+			"copy":   "사용자가 텍스트를 클립보드로 복사함 (text=원본 라인 전체, selection=실제 복사된 문자열)",
 		},
 		Fields: "untimedSpeech는 발화별 시간 정보를 제공하지 않는 모델의 전체 전사문이며, 조작 시각과 대응시키지 않는다. " +
 			"file/line/lineEnd는 원본 파일 기준 위치. approx=true면 라인 번호가 근사값. " +
 			"PDF 문서는 line 대신 pdf.page(1부터)와 pdf.x/pdf.y(페이지 좌상단 기준 0~1 정규화 클릭 좌표)를 사용하며, " +
-			"click의 text는 클릭 지점 주변 텍스트다. " +
-			"url이 있으면 웹 페이지 조작이다: file 대신 조작 당시 페이지 주소(url)·제목(title)과 요소 정보(selector/tag/id/classes), " +
-			"요소 텍스트(text), 가장 가까운 제목(heading), 주변 텍스트(context)를 가진다. " +
-			"selector는 다시 클릭할 정확한 경로가 아니라 요소를 알아볼 단서다.",
+			"click의 text는 클릭 지점 주변 텍스트다.",
 	}
 }
 
@@ -573,16 +548,14 @@ func buildTranscriptJSON(meta *RecordingMeta, result *WhisperResult, model strin
 		}})
 	}
 	for _, e := range meta.Events {
-		action := actionNameByEventType[e.Type]
-		if action == "" {
-			action = e.Type
+		action, known := actionNameByEventType[e.Type]
+		if !known {
+			continue
 		}
 		items = append(items, timed{at: e.T, rank: 1, entry: actionEntry{
 			Kind: "action", Action: action, AtMs: e.T,
 			File: e.File, Line: e.Line, LineEnd: e.LineEnd, Approx: e.Approx,
 			Text: e.Text, Selection: e.Selection, PDF: e.PDF,
-			URL: e.URL, Title: e.Title, Selector: e.Selector, Tag: e.Tag, ID: e.ID,
-			Classes: e.Classes, Heading: e.Heading, Context: e.Context,
 		}})
 	}
 	sort.SliceStable(items, func(i, j int) bool {

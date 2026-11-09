@@ -7,7 +7,6 @@
 - **배포 파일:** `mdview-1.0.3-macos-arm64.pkg`.
 - **인터넷:** 현재 문서 뷰어는 마크다운·다이어그램·코드 강조·PDF 라이브러리를 CDN에서 불러오므로 인터넷 연결이 필요합니다. 오프라인 사용은 보장하지 않습니다.
 - **별도 설치 불필요:** Go, Homebrew, Node.js, Xcode는 필요하지 않습니다.
-- **선택 기능:** 웹 페이지 조작을 함께 녹화하려면 Google Chrome 또는 Chromium이 필요합니다. 일반 문서 열람에는 필요하지 않습니다.
 
 이 버전은 Mac App Store 외부에서 배포하는 앱입니다. 앱에는 `Developer ID Application: Mediawave (23B9Q752EU)`, 설치 프로그램에는 `Developer ID Installer: Mediawave (23B9Q752EU)` 서명과 Apple 공증 티켓이 적용됩니다. 인증서·개인 키·개발자의 API 키는 배포 파일에 포함하지 않습니다.
 
@@ -83,15 +82,11 @@ HTML(`.html`, `.htm`) 파일은 CSS·스크립트·이미지가 적용된 미리
 | GPT-4o Transcribe (`gpt-4o-transcribe`) | 전체 전사문 저장, 발화별 시간 정보 없음 |
 | GPT-4o mini Transcribe (`gpt-4o-mini-transcribe`) | 전체 전사문 저장, 발화별 시간 정보 없음 |
 
-시간 정보가 없는 모델의 음성 전사는 `prompt.txt`의 별도 ‘음성 전사 (시간 정보 없음)’ 영역과 `transcript.json`의 `untimedSpeech`에 저장합니다. 문서·웹 조작 시간은 그대로 남습니다. 모델별 API 응답 형식은 [OpenAI 공식 전사 문서](https://developers.openai.com/api/reference/resources/audio/subresources/transcriptions/methods/create)를 따릅니다.
+시간 정보가 없는 모델의 음성 전사는 `prompt.txt`의 별도 ‘음성 전사 (시간 정보 없음)’ 영역과 `transcript.json`의 `untimedSpeech`에 저장합니다. 문서 조작 시간은 그대로 남습니다. 모델별 API 응답 형식은 [OpenAI 공식 전사 문서](https://developers.openai.com/api/reference/resources/audio/subresources/transcriptions/methods/create)를 따릅니다.
 
 환경 변수 `OPENAI_API_KEY`를 설정한 CLI에서는 환경 변수의 키가 우선합니다. 설정 창에도 이를 안내합니다. Finder에서 실행한 앱에는 터미널 환경 변수가 보통 전달되지 않으므로 웹 설정에서 저장하는 편이 간단합니다.
 
 음성 전사를 사용할 때 녹음 오디오는 OpenAI API로 전송되며 본인의 계정에 API 사용 요금이 부과됩니다. 키가 없거나 업로드 가능한 크기를 초과하면 전사를 생략하고 조작 기록만으로 프롬프트를 만듭니다. 키 없이도 문서 열람과 녹음은 사용할 수 있습니다.
-
-### 웹 페이지 조작 함께 녹화 — 선택 사항
-
-Google Chrome을 설치한 다음 브라우저 상단의 URL 입력란에 주소를 넣고 **웹 열기**를 누릅니다. mdview 전용 Chrome 프로필이 열리며 녹음 중 클릭·복사 등을 같은 타임라인에 기록합니다. 전용 프로필의 데이터는 `~/.config/mdview/chrome-profile`에 남습니다. 세부 동작과 제한은 프로젝트 `README.md`를 참고하세요.
 
 ## 5. 터미널에서 바로 사용하기
 
@@ -148,7 +143,7 @@ sudo rm /usr/local/bin/mdview
 sudo pkgutil --forget camp.tools.mdview.pkg
 ```
 
-개인 설정과 Chrome 프로필은 `~/.config/mdview`, 녹음은 `~/Library/Application Support/mdview/mdview-recordings`에 남습니다. 이전 버전에서 저장한 녹음은 당시 열었던 폴더의 `mdview-recordings`에 남습니다. 이 데이터까지 지우려면 Finder에서 위치를 확인한 뒤 필요한 파일을 백업하고 직접 삭제하세요.
+개인 설정은 `~/.config/mdview`(이전 버전의 웹 열기 기능이 만든 `chrome-profile` 포함), 녹음은 `~/Library/Application Support/mdview/mdview-recordings`에 남습니다. 이전 버전에서 저장한 녹음은 당시 열었던 폴더의 `mdview-recordings`에 남습니다. 이 데이터까지 지우려면 Finder에서 위치를 확인한 뒤 필요한 파일을 백업하고 직접 삭제하세요.
 
 ## 7. 문제가 생겼을 때
 

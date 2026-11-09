@@ -125,3 +125,25 @@ func TestSettingsBrowserEndToEnd(t *testing.T) {
 		})
 	}
 }
+
+// e2eChromeCandidates는 브라우저 E2E 테스트가 찾는 Chrome / Chromium 표준 설치 경로이다.
+var e2eChromeCandidates = []string{
+	"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+	"/Applications/Chromium.app/Contents/MacOS/Chromium",
+	"/usr/bin/google-chrome",
+	"/usr/bin/google-chrome-stable",
+	"/usr/bin/chromium",
+	"/usr/bin/chromium-browser",
+	`C:\Program Files\Google\Chrome\Application\chrome.exe`,
+	`C:\Program Files (x86)\Google\Chrome\Application\chrome.exe`,
+}
+
+// findChrome은 설치된 Chrome 실행 경로를 찾는다. 없으면 빈 문자열을 반환한다.
+func findChrome() string {
+	for _, p := range e2eChromeCandidates {
+		if st, err := os.Stat(p); err == nil && !st.IsDir() {
+			return p
+		}
+	}
+	return ""
+}

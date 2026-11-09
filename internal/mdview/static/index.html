@@ -27,9 +27,12 @@
       <header id="header-bar">
         <span id="filename-display"></span>
         <div id="toolbar-actions">
-          <input id="web-url" type="text" inputmode="url" autocomplete="off" spellcheck="false"
-                 placeholder="https://… 웹 페이지 열기" title="전용 Chrome 창에서 열 웹 페이지 주소" aria-label="열 웹 페이지 주소" />
-          <button id="web-open" type="button" title="전용 Chrome 창에서 열기 (녹음 중 클릭·복사가 함께 기록됨)">웹 열기</button>
+          <div id="export-menu-wrap">
+            <button id="export-menu-button" type="button" title="현재 문서 내보내기" aria-haspopup="menu" aria-expanded="false" aria-controls="export-menu">내보내기 <span aria-hidden="true">▾</span></button>
+            <div id="export-menu" role="menu" aria-label="내보내기" hidden>
+              <button id="export-pdf" type="button" role="menuitem">PDF로 저장…</button>
+            </div>
+          </div>
           <span id="job-status" hidden></span>
           <span id="record-status" hidden>
             <span id="record-indicator" aria-hidden="true"></span>

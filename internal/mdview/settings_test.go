@@ -15,7 +15,7 @@ import (
 func ptr[T any](value T) *T { return &value }
 
 func TestSettingsDefaultAndPersistence(t *testing.T) {
-	ts := newWebTestServer(t)
+	ts := newTestServer(t)
 	res := ts.get(t, apiSettingsPath)
 	if res.Header.Get("Cache-Control") != "no-store" {
 		t.Fatal("settings response must not be cached")
@@ -80,7 +80,7 @@ func TestSettingsDefaultAndPersistence(t *testing.T) {
 }
 
 func TestSettingsEnvironmentKeyIsNeverExposedOrOverwritten(t *testing.T) {
-	ts := newWebTestServer(t)
+	ts := newTestServer(t)
 	t.Setenv(openaiKeyEnv, "environment-private-key")
 	res := ts.post(t, apiSettingsPath, `{"openai_api_key":"saved-private-key"}`, nil)
 	state := decodeJSON[settingsResponse](t, res)
@@ -104,7 +104,7 @@ func TestSettingsEnvironmentKeyIsNeverExposedOrOverwritten(t *testing.T) {
 }
 
 func TestSettingsRejectsInvalidAndCrossOriginWrites(t *testing.T) {
-	ts := newWebTestServer(t)
+	ts := newTestServer(t)
 	if err := UpdateConfig(ptr("original-key"), ptr(DefaultTranscribeModel)); err != nil {
 		t.Fatal(err)
 	}

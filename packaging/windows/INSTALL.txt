@@ -30,12 +30,10 @@ RECORDING AND SETTINGS
 Allow microphone access for localhost in your browser when requested.
 Open the settings gear in the web page to save an optional OpenAI API key
 and transcription model. Without an API key, prompt.txt still contains
-the recorded document and web actions. OpenAI API use is billed separately.
+the recorded document actions. OpenAI API use is billed separately.
 Settings:   %USERPROFILE%\.config\mdview\config.json
 Recordings: %APPDATA%\mdview\mdview-recordings
 Recordings are automatically removed 7 days after saving.
-To record interactions with other websites, install Google Chrome and,
-if needed, set MDVIEW_CHROME_PATH to the full path of chrome.exe.
 The browser toast reports completion; Windows system notifications are
 not currently supported. Completed transcripts are copied to the clipboard.
 

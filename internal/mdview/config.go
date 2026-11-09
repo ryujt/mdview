@@ -30,7 +30,7 @@ type Config struct {
 	TranscribeModel string `json:"transcribe_model,omitempty"`
 }
 
-// ConfigDir은 mdview 설정 디렉토리(~/.config/mdview)를 반환한다. Chrome 전용 프로필도 이 아래에 둔다.
+// ConfigDir은 mdview 설정 디렉토리(~/.config/mdview)를 반환한다.
 func ConfigDir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {

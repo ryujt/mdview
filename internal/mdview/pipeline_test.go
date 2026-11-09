@@ -36,7 +36,7 @@ func pipelineFixture(t *testing.T) string {
 		DurationMs: 30000, Audio: "audio.webm",
 		Events: []RecordingEvent{
 			{T: 1000, Type: "focus", File: "doc.md", Line: 3, LineEnd: 3, Text: "본문"},
-			{T: 12345, Type: WebEventClick, URL: "https://example.com", Tag: "span", Classes: "metric-value", Text: "12,345"},
+			{T: 12345, Type: "copy", File: "doc.md", Line: 5, LineEnd: 5, Text: "12,345", Selection: "12,345"},
 		},
 	}
 	encoded, err := json.Marshal(meta)
@@ -70,7 +70,7 @@ func TestPipelineWithoutTranscription(t *testing.T) {
 		t.Errorf("job.Prompt = %q", job.Prompt)
 	}
 	text := readFixture(t, dir, promptFileName)
-	if !strings.Contains(text, promptNoSpeech) || !strings.Contains(text, `[00:12] 웹 클릭: "12,345" (span.metric-value)`) {
+	if !strings.Contains(text, promptNoSpeech) || !strings.Contains(text, `[00:12] 복사: "12,345" (doc.md:5)`) {
 		t.Errorf("프롬프트 내용 불일치:\n%s", text)
 	}
 }
