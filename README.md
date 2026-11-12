@@ -1,93 +1,93 @@
 # mdview
 
-마크다운 파일을 브라우저에서 실시간으로 렌더링하는 CLI 도구입니다.
-단일 파일 감시 모드와 현재 디렉토리 전체를 사이드바로 탐색하는 폴더 모드를 모두 지원합니다.
+mdview is a CLI tool that renders Markdown files live in your browser.
+It can watch a single file or let you browse the entire current directory from a sidebar.
 
-## 기능
+## Features
 
-- **파일 모드** (`mdview <file>`): 지정한 파일을 브라우저로 열고, 파일 변경을 실시간 반영합니다. 마크다운은 렌더링되고, 소스코드·설정 파일은 코드뷰어로 표시됩니다.
-- **폴더 모드** (`mdview`): 현재 디렉토리를 기준으로 왼쪽 사이드바에 프로젝트 파일 트리를 표시합니다. 마크다운(`.md`) 외에 텍스트(`.txt`), PDF(`.pdf`), 소스코드(`.go`, `.js`, `.py` 등)와 설정 파일(YAML, JSON, `.env`, `Dockerfile` 등)도 함께 표시됩니다. 파일을 클릭하면 메인 영역에 표시되며, 선택된 파일이 변경되면 자동으로 다시 렌더링됩니다.
-  - 트리는 폴더를 펼칠 때마다 해당 디렉토리 1레벨만 조회합니다 (대형 프로젝트에서도 초기 로딩이 가볍고, 다시 펼치면 목록이 갱신됩니다).
-  - 활성 파일을 다시 클릭하면 선택이 해제되어 초기 화면으로 돌아갑니다.
-  - 문서마다 스크롤 위치를 기억해, 다시 열면 보던 위치로 이동합니다 (처음 여는 문서는 맨 위).
-- 마크다운 파일은 렌더링된 화면으로, HTML(`.html`, `.htm`)은 CSS·스크립트·이미지가 적용된 미리보기로 표시됩니다. HTML은 뷰어와 격리된 영역에서 열리며 파일 변경도 자동 반영됩니다. 소스코드/설정 파일은 syntax highlighting과 라인 번호가 있는 코드뷰어로 표시됩니다. PDF는 텍스트 선택이 가능한 내장 PDF 뷰어(pdf.js)로 표시됩니다.
-- 표준 마크다운 (GFM) + 코드 블록 syntax highlighting + 복사 버튼
-- 커스텀 다이어그램: `mermaid`, `state`, `navigation`, `layout`, `jobflow`
-- **오디오 녹화**: 상단 툴바의 녹화 버튼으로 문서/코드를 보며 음성 설명을 녹음하고, 녹음 중 참조한 위치(파일 열람·텍스트 복사·라인 클릭)를 오디오 시간축에 맞춰 JSON으로 기록합니다. 입력 장치(마이크)를 드롭다운으로 선택할 수 있고, 녹음 중 입력 레벨이 표시됩니다.
-- **마크다운 ZIP으로 저장**: 마크다운 문서를 연 뒤 상단의 「내보내기 ▾ → 마크다운 ZIP으로 저장…」을 선택합니다. 현재 파일 전체를 `document.md`로 담고, 네비게이션(`navigation`)·상태도(`state`)는 Mermaid 코드로 변환합니다. 잡플로우(`jobflow`)는 `images/`의 PNG 파일로 저장해 Markdown에서 상대 경로로 참조하며, 기존 Mermaid 코드는 유지합니다. 압축을 푼 폴더 구조를 유지한 채 `document.md`를 Mermaid 지원 Markdown 뷰어에서 열면 됩니다.
-- **PDF로 저장**: 상단 툴바의 「내보내기 ▾ → PDF로 저장…」(또는 ⌘P / Ctrl+P)으로 선택한 문서를 PDF로 저장합니다. 마크다운·코드는 브라우저 인쇄 대화상자의 「PDF로 저장」을 쓰고, HTML은 뷰어 UI 없이 원본 문서만 인쇄하며, PDF 파일은 원본을 그대로 다운로드합니다.
-- **프롬프트 생성**: 녹화 저장 후 발화와 문서 조작을 시간순 텍스트로 정리한 `prompt.txt`가 항상 만들어집니다(API 키가 없으면 조작 기록만으로). 완료 토스트의 「prompt.txt 열기」로 바로 볼 수 있고, 그 내용을 AI에게 붙여 넣으면 됩니다.
-- **전사**: 녹화 저장 시 OpenAI `whisper-1` API로 **자동 전사**되어(API 키 필요) 발화 세그먼트 타임스탬프와 참조 이벤트를 병합한 `transcript.json` 문서가 생성됩니다. 완료되면 파일의 전체 내용을 시스템 클립보드에 자동 복사하고 시스템 알림과 화면 토스트로 알려줍니다. 진행 상태는 툴바 칩으로 표시됩니다. 수동 실행은 `mdview transcribe`.
-- **OpenAI 설정**: 웹 화면 왼쪽 하단의 톱니바퀴에서 API 키와 전사 모델을 저장합니다. 기본값은 기존 `whisper-1`이며, 변경은 다음 녹음부터 적용됩니다. 저장된 키는 화면으로 다시 보내지 않고 사용자 설정 파일(0600)에만 보관합니다.
-- **상세 로깅**: `DEBUG_MODE`/`LOG_TO_FILE` 환경변수로 2계층 로깅(텍스트 로그 + 카테고리별 상세 아티팩트 + 세션 프로세스 다이어그램)을 켤 수 있습니다.
+- **File mode** (`mdview <file>`) opens a file in your browser and reflects changes as they happen. Markdown is rendered, and source and configuration files open in the code viewer.
+- **Folder mode** (`mdview`) shows a project tree rooted at the current directory in the left sidebar. In addition to Markdown (`.md`), it lists text (`.txt`), PDF (`.pdf`), source code (`.go`, `.js`, `.py`, and others), and configuration files (YAML, JSON, `.env`, `Dockerfile`, and others). Click a file to open it in the main pane. The viewer refreshes automatically when the selected file changes.
+  - Expanding a folder loads only its immediate contents. This keeps the initial load light even for large projects and refreshes the listing when you expand the folder again.
+  - Click the active file again to clear the selection and return to the initial view.
+  - The viewer remembers each document's scroll position. A document you open for the first time starts at the top.
+- Markdown files render as formatted documents. HTML (`.html`, `.htm`) opens in an isolated preview with CSS, scripts, and images, and refreshes as the file changes. Source code and configuration files open with syntax highlighting and line numbers. The built-in PDF viewer (PDF.js) supports text selection.
+- Standard Markdown (GFM), with syntax highlighting and copy buttons for code blocks
+- Custom diagrams including `mermaid`, `state`, `navigation`, `layout`, and `jobflow`
+- **Audio recording** lets you narrate a document or code from the toolbar. File opens, text copies, and line clicks are saved as JSON events aligned to the audio timeline. Choose a microphone from the input dropdown and monitor the input level while recording.
+- **Save as Markdown ZIP** from **Export ▾ → Save as Markdown ZIP…** while a Markdown document is open. The archive contains the full file as `document.md`. Navigation (`navigation`) and state (`state`) diagrams are converted to Mermaid. Job flows (`jobflow`) become PNG files under `images/` and are referenced by relative paths. Existing Mermaid blocks are preserved. Extract the archive, keep its folder structure, and open `document.md` in a Markdown viewer that supports Mermaid.
+- **Save as PDF** from **Export ▾ → Save as PDF…** or with ⌘P / Ctrl+P. For Markdown and code, select **Save as PDF** in the browser's print dialog. HTML prints the source document without the viewer controls. PDF files download as-is.
+- **Prompt generation** always creates a `prompt.txt` file after saving a recording. It lists speech and document actions in chronological order. With no API key, it contains only the actions. Select **Open prompt.txt** in the completion notification to view it and paste its contents into an AI tool.
+- **Transcription** runs automatically when a recording is saved and an API key is available. OpenAI's `whisper-1` API returns speech segment timestamps, which mdview merges with reference events in `transcript.json`. On completion, mdview copies the full file to the system clipboard and displays a system notification and an in-app notification. A toolbar status indicator shows progress. Run `mdview transcribe` to transcribe manually.
+- **OpenAI settings** let you save an API key and transcription model from the gear icon at the bottom left. The default remains `whisper-1`, and changes apply to the next recording. The saved key stays in the user configuration file (0600 permissions) and is never sent back to the browser.
+- **Detailed logging** can be enabled with `DEBUG_MODE` and `LOG_TO_FILE`. It includes text logs, detailed artifacts by category, and session process diagrams.
 
-## 사용자용 설치 — Apple Silicon Mac
+## Install on Apple Silicon Macs
 
-`mdview-1.0.4-macos-arm64.pkg`를 더블클릭하고 설치를 완료하면 앱과 CLI가 함께 설치됩니다.
-응용 프로그램에서 mdview를 실행하거나 터미널에서 바로 `mdview`를 입력하세요.
-CLI는 `/usr/local/bin/mdview`에 자동 연결되며 이 Mac의 다른 사용자도 사용할 수 있습니다.
-Go·Homebrew·별도의 터미널 설정은 필요하지 않습니다. macOS 13 이상 Apple Silicon Mac을 지원하며,
-현재 문서 렌더링에는 CDN 리소스를 가져오기 위한 인터넷 연결이 필요합니다.
+Double-click `mdview-1.0.4-macos-arm64.pkg` and complete the installation to install both the app and the CLI.
+Launch mdview from Applications or type `mdview` in Terminal.
+The installer links the CLI at `/usr/local/bin/mdview` so other users on the Mac can run it too.
+The package supports Apple Silicon Macs running macOS 13 or later and requires no Go, Homebrew, or Terminal setup.
+Document rendering currently requires an internet connection to load CDN resources.
 
-설치·녹음 설정·CLI 사용·업데이트·삭제 방법은 [설치 가이드](docs/INSTALL-macos-arm64.md)를 참고하세요.
-Developer ID 서명·Apple 공증을 포함한 배포 파일 재생성은 [macOS 배포 빌드](packaging/macos/README.md)에 설명되어 있습니다.
+See the [installation guide](docs/INSTALL-macos-arm64.md) for setup, recording, CLI usage, updates, and removal.
+The [macOS release build guide](packaging/macos/README.md) covers rebuilding the distribution package, including Developer ID signing and Apple notarization.
 
-## 개발자용 빌드 및 설치
+## Build and install from source
 
 ```bash
 cd cli/mdview
-./install.sh                # test + vet + build + ~/.local/bin 설치 + 설정 복사
-./install.sh --build-only   # 빌드까지만
-PREFIX=/usr/local ./install.sh   # 설치 경로 변경 ($PREFIX/bin)
+./install.sh                # Test, vet, build, install to ~/.local/bin, and copy the configuration
+./install.sh --build-only   # Build only
+PREFIX=/usr/local ./install.sh   # Set the installation directory ($PREFIX/bin)
 ```
 
-프로젝트 루트에 `config.json`(git 무시됨, `config.example.json` 참고)이 있으면
-설치 시 `~/.config/mdview/config.json`으로 함께 복사됩니다 (권한 0600).
+If the repository root contains a Git-ignored `config.json` (see `config.example.json`),
+installation copies it to `~/.config/mdview/config.json` with 0600 permissions.
 
-## 실행
+## Run mdview
 
 ```bash
-# 단일 파일 모드
+# Single-file mode
 mdview README.md
 
-# 폴더 모드 (현재 디렉토리)
+# Folder mode (current directory)
 mdview
 
-# 포트 지정 (기본 8642, 사용 중이면 이후 포트 순차 시도, 0이면 임의 포트)
+# Set the port (defaults to 8642, tries subsequent ports if busy, or picks an available port with 0)
 mdview -port 9000 README.md
 ```
 
-실행하면 브라우저가 자동으로 열립니다. `Ctrl+C`로 종료합니다.
+The browser opens automatically. Press `Ctrl+C` to quit.
 
-포트가 8642로 고정된 이유: 브라우저의 마이크 권한은 `localhost:포트` origin 단위로 기억되므로,
-포트가 매번 바뀌면 녹화 시마다 권한 프롬프트가 다시 뜹니다. 고정 포트에서 한 번 허용하면 이후 실행에서도 유지됩니다.
+Browsers remember microphone permissions per `localhost:<port>` origin. The default port of 8642
+allows that permission to carry over between runs. A different port may trigger a new permission prompt.
 
-## 오디오 녹화 및 전사
+## Audio recording and transcription
 
-문서나 코드를 보면서 요구사항·질문을 음성으로 녹음하고, 설명 중 참조한 텍스트 위치를 함께 저장해
-AI나 동료에게 전달하기 위한 기능입니다.
+Record spoken requirements or questions while viewing documents or code. The recording includes the
+text locations you referenced so you can share the context with an AI tool or a colleague.
 
-### 녹화
+### Record audio
 
-1. 상단 툴바의 ⏺ 버튼을 누르면 마이크 녹음이 시작됩니다 (버튼이 정지 아이콘으로 바뀌고 타이머·입력 레벨이 표시됩니다). 버튼 왼쪽 드롭다운에서 **입력 장치**를 선택할 수 있으며, 선택은 브라우저에 저장되어 다음 녹음에도 유지됩니다. 사용된 장치 이름은 `events.json`의 `device` 필드에 기록됩니다.
-2. 녹화 중 다음 행동이 오디오 기준 시간(`t`, ms)과 함께 기록됩니다.
-   - **open**: 사이드바에서 파일을 열람
-   - **copy**: 텍스트 선택 후 `Ctrl+C`(⌘C) 또는 복사 버튼 사용 — 파일 내 라인 번호와 소스 기준 텍스트 저장 (마크다운은 렌더링 결과가 아닌 마크다운 코드 기준)
-   - **focus**: 본문 클릭 — 클릭한 라인(코드뷰어) 또는 블록(마크다운)이 하이라이트되고 라인 번호가 저장됨
-   - **word**: 본문 더블클릭 — 선택된 텍스트(단어)가 저장됨. 여백 등을 더블클릭해 선택된 텍스트가 없으면 클릭 위치 뒤의 첫 단어를 찾아 저장하고 그 단어를 선택 상태로 표시
-   - PDF 문서에서는 라인 대신 `pdf` 필드가 기록됩니다 — 클릭(focus)은 페이지 번호와 페이지 좌상단 기준 0~1 정규화 좌표(`page`, `x`, `y`) 및 클릭 지점 주변 텍스트, 텍스트 선택 복사(copy)와 더블클릭(word)은 페이지 번호와 선택 문자열
-3. 버튼을 다시 누르면 사용자 앱 데이터의 고정 경로에 저장됩니다. 파일 모드와 폴더 모드 모두 작업 디렉토리와 무관하게 같은 위치를 사용합니다.
+1. Click ⏺ in the toolbar to start recording from your microphone. The button changes to a stop icon, and a timer and input level appear. Choose an **input device** from the dropdown to the left of the button. The browser remembers your selection for the next recording. The device name is recorded in the `device` field of `events.json`.
+2. The following actions are recorded with their time relative to the audio (`t`, in milliseconds).
+   - **open**: Open a file from the sidebar.
+   - **copy**: Select text and use `Ctrl+C` (⌘C) or the copy button. The event records line numbers and text from the source file. For Markdown, the source text is the Markdown markup.
+   - **focus**: Click the document body. The viewer highlights the line in code or the block in Markdown and records the line number.
+   - **word**: Double-click the document body. The viewer records the selected text. If the click leaves nothing selected, such as in whitespace, the viewer finds, selects, and records the first word after that point.
+   - In PDFs, a `pdf` field replaces line numbers. A focus event records the page number, coordinates (`page`, `x`, `y`) normalized to 0–1 from the top-left corner, and text near the click. Copy and double-click events record the page number and selected text.
+3. Click the button again to save. File and folder modes both use a fixed location in the user's application data directory, regardless of the working directory.
    - macOS: `~/Library/Application Support/mdview/mdview-recordings/rec-<timestamp>/`
    - Linux: `${XDG_CONFIG_HOME:-~/.config}/mdview/mdview-recordings/rec-<timestamp>/`
-   - `audio.webm` (브라우저에 따라 `.m4a`/`.ogg`) — 녹음 오디오
-   - `events.json` — 이벤트 타임라인
-   - `prompt.txt` — 발화·조작 타임라인 텍스트 (AI에게 붙여 넣는 용도, 항상 생성)
+   - `audio.webm` (`.m4a` or `.ogg` depending on the browser) contains the recorded audio.
+   - `events.json` contains the event timeline.
+   - `prompt.txt` contains the speech and action timeline for pasting into an AI tool. This file is always generated.
 
-녹화 폴더와 그 안의 모든 파일은 저장 시각으로부터 **7일**이 지나면 자동 삭제됩니다.
-mdview 시작 시, 녹화 저장 전, 실행 중 매시간 정리하며, 종료된 동안 만료된 녹화는 다음 실행 때 정리합니다.
-후처리 중인 녹화는 완료될 때까지 보존합니다.
+Recording folders and their contents are automatically deleted **7 days** after they are saved.
+Cleanup runs on startup, before saving a recording, and hourly while mdview is running. Recordings that expire while mdview is closed are cleaned up on the next launch.
+Recordings undergoing post-processing are kept until processing completes.
 
-`events.json` 예시:
+Example `events.json`
 
 ```json
 {
@@ -101,145 +101,145 @@ mdview 시작 시, 녹화 저장 전, 실행 중 매시간 정리하며, 종료�
   "events": [
     { "t": 0, "type": "open", "file": "docs/guide.md" },
     { "t": 5200, "type": "focus", "file": "docs/guide.md", "line": 42, "lineEnd": 45, "text": "..." },
-    { "t": 7300, "type": "word", "file": "docs/guide.md", "line": 43, "lineEnd": 43, "text": "오케스트레이터" },
-    { "t": 9100, "type": "copy", "file": "main.go", "line": 10, "lineEnd": 14, "text": "<소스 라인>", "selection": "<복사된 문자열>" },
+    { "t": 7300, "type": "word", "file": "docs/guide.md", "line": 43, "lineEnd": 43, "text": "orchestrator" },
+    { "t": 9100, "type": "copy", "file": "main.go", "line": 10, "lineEnd": 14, "text": "<source lines>", "selection": "<copied text>" },
     { "t": 12000, "type": "open", "file": "docs/spec.pdf" },
     { "t": 13500, "type": "focus", "file": "docs/spec.pdf", "pdf": { "page": 2, "x": 0.41, "y": 0.27 } },
-    { "t": 15000, "type": "copy", "file": "docs/spec.pdf", "pdf": { "page": 2 }, "selection": "<복사된 문자열>" }
+    { "t": 15000, "type": "copy", "file": "docs/spec.pdf", "pdf": { "page": 2 }, "selection": "<copied text>" }
   ]
 }
 ```
 
-SmartMD 전처리로 라인 번호가 원본과 어긋나는 블록은 원본 텍스트 탐색으로 보정되며,
-보정에 실패하면 `"approx": true`로 표시됩니다.
-이전 버전에서 저장한 녹화의 `events.json`에 남아 있는 웹 페이지 조작(`web-*`) 이벤트처럼 알 수 없는 타입은
-`prompt.txt`·`transcript.json`을 만들 때 오류 없이 건너뜁니다.
+When SmartMD preprocessing shifts line numbers, mdview searches the original text to correct them.
+If the search fails, mdview marks the position with `"approx": true`.
+When generating `prompt.txt` and `transcript.json`, mdview skips unknown event types,
+including the web action events (`web-*`) that may appear in recordings saved by older versions.
 
-#### 마이크가 녹음되지 않을 때
+#### Troubleshoot microphone input
 
-녹음은 브라우저(getUserMedia)가 수행하므로 mdview 바이너리가 아니라 **브라우저의 마이크 권한**이 필요합니다.
+The browser records audio through `getUserMedia`, so grant microphone permission to the **browser**.
 
-1. 녹화 중 상단의 **입력 레벨 미터**(녹색 바)가 움직이는지 확인 — 움직이지 않으면 소리가 들어오지 않는 상태입니다.
-2. 주소창의 사이트 권한 아이콘에서 `localhost:8642`의 마이크를 **허용**으로 변경 후 새로고침.
-3. macOS: 시스템 설정 → 개인정보 보호 및 보안 → **마이크**에서 사용 중인 브라우저(Chrome/Safari 등)를 켜고 브라우저를 재시작.
-4. 권한이 차단된 상태거나 장치가 없으면 녹화 버튼을 눌렀을 때 원인별 안내 토스트가 표시됩니다.
+1. Check whether the **input level meter** (green bar) in the toolbar moves while recording. A stationary meter indicates there is no audio input.
+2. Use the site permissions icon in the address bar to set microphone access for `localhost:8642` to **Allow**, then reload.
+3. On macOS, go to System Settings → Privacy & Security → **Microphone**, enable access for your browser (such as Chrome or Safari), and restart it.
+4. If access is blocked or no microphone is available, clicking Record displays a notification explaining the cause.
 
-### 전사 (음성 → 텍스트)
+### Transcribe speech to text
 
-**자동 후처리**: 녹화 저장 직후 서버가 백그라운드에서 전사(API 키가 있고 25MB 이하일 때)와 `prompt.txt` 생성을 진행합니다.
-툴바에 "후처리 중" 칩이 표시되고, `transcript.json` 생성 후 **JSON 전체 내용이 클립보드에 자동 복사**됩니다.
-시스템 알림과 완료 토스트를 확인한 뒤 원하는 곳에 붙여 넣으면 됩니다. macOS에서는 `pbcopy`와 `osascript`를 사용하므로 브라우저 창에 포커스가 없어도 동작합니다.
-복사 실패 시 토스트의 「transcript.json 복사」로 다시 시도할 수 있고, 「prompt.txt 열기」로 저장된 프롬프트도 볼 수 있습니다.
-(키가 없거나 오디오가 25MB를 넘으면 전사만 생략되고 `prompt.txt`는 조작 기록만으로 만들어집니다. 상태 API: `GET /api/recording/status`)
+**Automatic post-processing** starts as soon as the recording is saved. The server generates `prompt.txt` in the background and transcribes audio up to 25 MB when an API key is available.
+The toolbar shows a **Post-processing** indicator. After creating `transcript.json`, mdview **copies the full JSON to the clipboard**.
+Check the system and in-app notifications, then paste the result where you need it. On macOS, this works even when the browser is out of focus because mdview uses `pbcopy` and `osascript`.
+If copying fails, select **Copy transcript.json** in the notification to retry. Select **Open prompt.txt** to view the saved prompt.
+With no key or audio larger than 25 MB, mdview skips transcription and builds `prompt.txt` from the actions alone. The status endpoint is `GET /api/recording/status`.
 
-수동 실행 (`mdview transcribe`는 전사 여부와 무관하게 `prompt.txt`도 다시 만듭니다):
+To run transcription manually, use the commands below. `mdview transcribe` also regenerates `prompt.txt` regardless of whether transcription runs.
 
 ```bash
 mdview transcribe "$HOME/Library/Application Support/mdview/mdview-recordings/rec-20260718-230000"
-mdview transcribe -lang ko <recording-dir>       # 언어 고정 (기본: 자동 감지)
-mdview transcribe -model large-v3 <recording-dir>  # 로컬 whisper CLI 사용
+mdview transcribe -lang ko <recording-dir>       # Set the language (default: auto-detect)
+mdview transcribe -model large-v3 <recording-dir>  # Use the local Whisper CLI
 ```
 
-- 기본 모델은 기존과 동일한 **`whisper-1`**입니다. 왼쪽 하단 설정에서 모델을 선택할 수 있으며, `whisper-1`은 `verbose_json` 응답의 세그먼트 타임스탬프(start/end)를 이벤트 타임라인과 병합합니다.
-- API 키·모델 설정: 왼쪽 하단 **설정 → OpenAI API 키·전사 모델 → 저장**. 키는 환경변수 → 사용자 설정 파일 순서로 사용합니다. GPT 전사 모델은 시간 정보 없이 전체 전사문을 별도 저장합니다([지원 모델과 저장 방식](docs/INSTALL-macos-arm64.md#음성-전사-설정--선택-사항)).
-  - 환경변수: `OPENAI_API_KEY`
-  - 설정 파일: `~/.config/mdview/config.json` — 프로젝트 루트의 `config.json`을 `./install.sh`가 복사해 줍니다.
+- The default model is **`whisper-1`**. You can select a model in the settings at the bottom left. For `whisper-1`, mdview merges the segment start and end timestamps from the `verbose_json` response with the event timeline.
+- Go to **Settings → OpenAI API Key and Transcription Model → Save** at the bottom left. mdview checks the environment variable first, then the user configuration file. GPT transcription models save the full transcript separately without timestamps. See [optional speech transcription setup](docs/INSTALL-macos-arm64.md#optional-speech-transcription-setup).
+  - Environment variable: `OPENAI_API_KEY`
+  - Configuration file: `~/.config/mdview/config.json`. `./install.sh` copies it from `config.json` at the project root.
     ```json
     { "openai_api_key": "sk-..." }
     ```
-- 결과: 녹화 디렉토리에 whisper 원본 결과(`audio.json`)와 발화·참조 이벤트가 시간순으로 병합된 `transcript.json`이 생성됩니다. AI가 그대로 해석할 수 있도록 발화(`kind: "speech"`)와 사용자 행동(`kind: "action"`)을 명시적으로 구분한 단일 타임라인이며, 행동 이름도 실제 동작 그대로(`open` 열람 / `click` 클릭 / `select` 더블클릭 선택 / `copy` 복사) 표기됩니다. 각 필드의 의미는 문서 안의 `guide` 항목에 자체 기술되어 있습니다.
-- `audio.json`이 이미 있으면 API를 다시 호출하지 않고 재사용합니다.
-- OpenAI API의 오디오 업로드 상한은 25MB입니다 (약 40분 분량의 webm/opus 녹음).
-- 오프라인 전사가 필요하면 `-model large-v3`로 로컬 **openai-whisper** CLI(`openai/whisper-large-v3`)를 사용할 수 있습니다. 요구사항: `pip install -U openai-whisper` + `ffmpeg` (macOS: `brew install ffmpeg`).
+- The recording directory contains the raw Whisper result (`audio.json`) and `transcript.json`, a single chronological timeline of speech (`kind: "speech"`) and user actions (`kind: "action"`) that an AI tool can interpret directly. Action names reflect what happened (`open`, `click`, `select` for double-click selection, and `copy`). The `guide` field describes the fields.
+- If `audio.json` already exists, mdview reuses it without calling the API again.
+- The OpenAI API audio upload limit is 25 MB, approximately 40 minutes of WebM/Opus audio.
+- For offline transcription, use `-model large-v3` with the local **openai-whisper** CLI (`openai/whisper-large-v3`). Install it with `pip install -U openai-whisper` and install `ffmpeg` (on macOS, `brew install ffmpeg`).
 
-`transcript.json` 타임라인 예시:
+Example `transcript.json` timeline
 
 ```json
 {
   "timeline": [
-    { "kind": "speech", "startMs": 4000, "endMs": 9000, "text": "본문 세 번째 줄에 있는 내용이 중요합니다." },
-    { "kind": "action", "action": "click", "atMs": 6000, "file": "doc.md", "line": 3, "lineEnd": 3, "text": "본문 한 줄" },
-    { "kind": "speech", "startMs": 9000, "endMs": 13000, "text": "마지막으로 복사한 메인 함수 코드를 확인해 주세요." },
-    { "kind": "action", "action": "copy", "atMs": 11000, "file": "main.go", "line": 3, "lineEnd": 5, "text": "<소스 라인>", "selection": "<복사된 문자열>" }
+    { "kind": "speech", "startMs": 4000, "endMs": 9000, "text": "The third line of the document is important." },
+    { "kind": "action", "action": "click", "atMs": 6000, "file": "doc.md", "line": 3, "lineEnd": 3, "text": "A line from the document" },
+    { "kind": "speech", "startMs": 9000, "endMs": 13000, "text": "Please review the main function I just copied." },
+    { "kind": "action", "action": "copy", "atMs": 11000, "file": "main.go", "line": 3, "lineEnd": 5, "text": "<source lines>", "selection": "<copied text>" }
   ]
 }
 ```
 
-## 상세 로깅
+## Detailed logging
 
-디버깅용 2계층 로깅 시스템을 내장합니다. 환경변수로 켭니다:
+Enable the two logging layers for debugging with environment variables.
 
 ```bash
 DEBUG_MODE=true LOG_TO_FILE=true LOG_LEVEL=DEBUG mdview
 ```
 
-| 환경변수 | 기본값 | 설명 |
+| Environment variable | Default | Description |
 |---------|--------|------|
-| `DEBUG_MODE` | `false` | `true`여야 텍스트 로그가 출력됨 |
-| `LOG_TO_FILE` | `false` | `true`여야 파일(세션/아티팩트)에 기록됨 |
-| `LOG_DIR` | `logs` | 로그 디렉토리 경로 |
+| `DEBUG_MODE` | `false` | Set to `true` to enable text logging |
+| `LOG_TO_FILE` | `false` | Set to `true` to write session logs and artifacts to files |
+| `LOG_DIR` | `logs` | Log directory path |
 | `LOG_LEVEL` | `INFO` | DEBUG/INFO/WARN/ERROR |
 
-- **1계층 (텍스트 로그)**: 콘솔(200자 절삭)과 세션 `.log` 파일에 시간순 한 줄 메시지.
-- **2계층 (상세 아티팩트)**: 한 줄로 담을 수 없는 데이터를 카테고리별 파일로 저장.
-  파일명 `{시각}_{세션ID}_{카테고리}_{순번}_{ok|err}.md` — 목록만 봐도 순서·성공/실패가 보입니다.
-- 세션 종료 시 프로세스 플로우 **Mermaid 다이어그램**이 자동 생성됩니다 (노드 클릭 → 해당 아티팩트로 이동).
-  `mdview`로 `logs/` 디렉토리를 열면 다이어그램을 바로 렌더링해 볼 수 있습니다.
-- 7일 지난 로그는 세션 시작 시 자동 삭제됩니다.
+- **Layer 1 (text logs)** writes chronological one-line messages to the console (truncated to 200 characters) and to a session `.log` file.
+- **Layer 2 (detailed artifacts)** writes data that requires more than one line to files organized by category.
+  The filename `{timestamp}_{sessionID}_{category}_{sequence}_{ok|err}.md` shows the order and outcome in a directory listing.
+- When a session ends, mdview generates a **Mermaid process flow diagram**. Click a node to open its artifact.
+  Open the `logs/` directory with `mdview` to render the diagram.
+- At session startup, mdview deletes logs older than 7 days.
 
 ```
 logs/
-  └── 20260719-004740-001/                  <- 세션 디렉토리
-      ├── 20260719-004740_f605e6ed.log      <- 1계층 세션 텍스트 로그
-      ├── whisper/                          <- 전사 호출 상세 (요청/응답/에러)
-      ├── recording/                        <- 녹화 업로드 상세 (이벤트 요약)
-      ├── state/                            <- 상태 스냅샷 (JSON)
-      └── process/                          <- 세션 프로세스 다이어그램 (Mermaid)
+  └── 20260719-004740-001/                  <- Session directory
+      ├── 20260719-004740_f605e6ed.log      <- Layer 1 session text log
+      ├── whisper/                          <- Transcription call details (request, response, error)
+      ├── recording/                        <- Recording upload details (event summary)
+      ├── state/                            <- State snapshots (JSON)
+      └── process/                          <- Session process diagram (Mermaid)
 ```
 
-## 프로젝트 구조
+## Project structure
 
 ```
 cli/mdview/
-  install.sh                 # 빌드 및 설치 스크립트
+  install.sh                 # Build and installation script
   cmd/
-    main.go                  # Orchestrator (CLI, 서브커맨드, 와이어링)
+    main.go                  # Orchestrator (CLI, subcommands, wiring)
   internal/
     mdview/
       server.go              # HTTP / WebSocket Gateway
-      hub.go                 # WebSocket 브로드캐스트 Worker
-      watcher.go             # 파일/디렉토리 감시 Worker
-      browser.go             # 브라우저 오픈 Gateway
-      tree.go                # 디렉토리 트리 구성 Worker
-      filetypes.go           # 뷰어 대상 파일 타입 정책
-      recording.go           # 녹화(오디오+이벤트) 저장 Worker
-      recording_retention.go # 고정 저장 경로와 7일 보관 정리
-      recording_completion.go # 전사 JSON 클립보드 복사와 시스템 알림
-      transcribe.go          # 전사(whisper-1 API/로컬 CLI) 및 transcript.md 생성 Orchestrator
-      config.go              # 사용자 설정 (~/.config/mdview/config.json)
-      pipeline.go            # 저장 → 전사(가능 시) → prompt.txt Sub-Orchestrator
-      prompt.go              # prompt.txt 생성 (순수 함수)
-      logging/               # 2계층 로깅 (Logger 싱글톤 + Mermaid 렌더러)
+      hub.go                 # WebSocket broadcast worker
+      watcher.go             # File and directory watcher
+      browser.go             # Browser launch gateway
+      tree.go                # Directory tree worker
+      filetypes.go           # Policy for supported file types
+      recording.go           # Recording storage worker (audio and events)
+      recording_retention.go # Fixed storage location and 7-day retention
+      recording_completion.go # Transcript clipboard copy and system notifications
+      transcribe.go          # Transcription (whisper-1 API or local CLI) and transcript.json generation
+      config.go              # User configuration (~/.config/mdview/config.json)
+      pipeline.go            # Save, transcribe when possible, then generate prompt.txt
+      prompt.go              # prompt.txt generation (pure function)
+      logging/               # Two-layer logging (Logger singleton and Mermaid renderer)
         logger.go
         process_event.go
-      types.go               # 공유 타입
-      static/                # 임베딩되는 프론트엔드 정적 파일
-        index.html           # 툴바(내보내기 메뉴·녹화 버튼) 포함 레이아웃
+      types.go               # Shared types
+      static/                # Embedded frontend assets
+        index.html           # Layout with toolbar, export menu, and recording button
         css/
         js/
-          recorder.js        # 녹음 + 이벤트 타임라인 기록 Worker
-          pdf-export.js      # 툴바 「내보내기 → PDF·마크다운 ZIP 저장」
-          markdown-export.js # Mermaid 변환·잡플로우 PNG·ZIP 생성
+          recorder.js        # Audio recording and event timeline worker
+          pdf-export.js      # Toolbar export controls for PDF and Markdown ZIP
+          markdown-export.js # Mermaid conversion, job flow PNGs, and ZIP creation
           ...
 ```
 
-## 아키텍처 메모
+## Architecture notes
 
-- `cmd/main.go`가 Orchestrator로서 Hub / Watcher / Server / Browser를 배선합니다.
-- Worker는 상위 객체를 참조하지 않고 콜백(`OnChange`)을 통해 이벤트를 보고합니다.
-- 파일 경로 검증 로직(`ResolveRelPath`)을 통해 폴더 모드에서의 path traversal을 차단합니다.
+- `cmd/main.go` orchestrates the Hub, Watcher, Server, and Browser.
+- Workers report events through callbacks (`OnChange`) without referencing their parent objects.
+- `ResolveRelPath` validates file paths to prevent path traversal in folder mode.
 
-## 요구사항
+## Requirements
 
-- Go 1.26 이상 (go.mod의 `go 1.26`, cdproto 요구사항. 로컬 Go가 더 낮으면 `GOTOOLCHAIN=auto`로 첫 빌드 시 자동 다운로드)
+- Go 1.26 or later (`go 1.26` in go.mod, required by cdproto). With `GOTOOLCHAIN=auto`, an older local Go installation downloads the required toolchain on the first build.
 - macOS / Linux / Windows
