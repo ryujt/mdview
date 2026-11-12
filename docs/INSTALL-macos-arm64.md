@@ -4,15 +4,15 @@
 
 - **지원 기기:** Apple Silicon Mac(M1·M2·M3·M4 및 이후 Apple Silicon 모델).
 - **운영체제:** macOS 13 Ventura 이상.
-- **배포 파일:** `mdview-1.0.3-macos-arm64.pkg`.
-- **인터넷:** 현재 문서 뷰어는 마크다운·다이어그램·코드 강조·PDF 라이브러리를 CDN에서 불러오므로 인터넷 연결이 필요합니다. 오프라인 사용은 보장하지 않습니다.
+- **배포 파일:** `mdview-1.0.4-macos-arm64.pkg`.
+- **인터넷:** 일부 다이어그램·코드 강조·PDF 리소스를 CDN에서 불러오므로 문서 렌더링에는 인터넷 연결이 필요합니다. 오프라인 사용은 보장하지 않습니다.
 - **별도 설치 불필요:** Go, Homebrew, Node.js, Xcode는 필요하지 않습니다.
 
 이 버전은 Mac App Store 외부에서 배포하는 앱입니다. 앱에는 `Developer ID Application: Mediawave (23B9Q752EU)`, 설치 프로그램에는 `Developer ID Installer: Mediawave (23B9Q752EU)` 서명과 Apple 공증 티켓이 적용됩니다. 인증서·개인 키·개발자의 API 키는 배포 파일에 포함하지 않습니다.
 
 ## 2. 설치하기 — 터미널 없이
 
-1. `mdview-1.0.3-macos-arm64.pkg`를 더블클릭합니다.
+1. `mdview-1.0.4-macos-arm64.pkg`를 더블클릭합니다.
 2. macOS 설치 프로그램에서 **계속 → 설치**를 누릅니다.
 3. 요청하면 Mac 관리자 인증을 완료합니다.
 4. 설치가 완료되면 **닫기**를 누릅니다.
@@ -44,6 +44,15 @@ HTML(`.html`, `.htm`) 파일은 CSS·스크립트·이미지가 적용된 미리
 - 앱 창을 닫아도 앱과 문서 서버가 종료됩니다.
 
 문서 서버는 이 Mac의 로컬 주소에서만 접속할 수 있습니다. 기본 주소는 `http://localhost:8642`이며, 사용 중이면 앱 창에 표시되는 다른 포트를 사용합니다.
+
+### 마크다운 ZIP으로 저장하기
+
+마크다운 문서를 연 뒤 상단의 **내보내기 → 마크다운 ZIP으로 저장…**을 누릅니다. 현재 문서 전체를 담은 ZIP이 다운로드됩니다.
+
+- `document.md`: 네비게이션(`navigation`)·상태도(`state`)를 Mermaid 코드로 바꾼 문서입니다. 기존 Mermaid 코드는 그대로 유지합니다.
+- `images/`: 잡플로우(`jobflow`) PNG가 저장되며 `document.md`에서 상대 경로로 참조합니다.
+
+압축을 풀고 `document.md`와 `images/`를 같은 폴더 구조로 유지하세요. `document.md`를 Mermaid 지원 Markdown 뷰어에서 열면 변환한 다이어그램과 잡플로우 이미지를 함께 볼 수 있습니다. 원본 문서 파일은 수정하지 않습니다.
 
 ## 4. 녹음·전사 사용하기
 

@@ -18,9 +18,12 @@ const PRINT_FRAME_ID = 'pdf-export-frame';
 const DEFAULT_BASE_NAME = 'document';
 
 let getTarget = () => null;
+let getMarkdownTarget = () => null;
 let menuButton = null;
 let menuList = null;
 let exportItem = null;
+let zipItem = null;
+let zipBusy = false;
 let printFrame = null;
 let printStarted = false;
 let printTimer = 0;
@@ -122,13 +125,15 @@ function escapeAttr(value) {
 }
 
 /**
- * @param {{getTarget: () => ({kind: 'page'|'html'|'pdf', name: string, url?: string} | null)}} options
+ * @param {{getTarget: () => ({kind: 'page'|'html'|'pdf', name: string, url?: string} | null), getMarkdownTarget?: () => ({name: string, markdown: string} | null)}} options
  */
 export function initPdfExport(options) {
   getTarget = options.getTarget;
+  getMarkdownTarget = options.getMarkdownTarget || (() => null);
   menuButton = document.getElementById('export-menu-button');
   menuList = document.getElementById('export-menu');
   exportItem = document.getElementById('export-pdf');
+  zipItem = document.getElementById('export-zip');
   if (!menuButton || !menuList || !exportItem) return;
 
   menuButton.addEventListener('click', () => {
@@ -140,10 +145,10 @@ export function initPdfExport(options) {
     exportItem.focus();
   });
   menuButton.addEventListener('keydown', (e) => {
-    if (e.key === 'ArrowDown') {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
       openMenu();
-      exportItem.focus();
+      (e.key === 'ArrowUp' && zipItem ? zipItem : exportItem).focus();
     }
   });
   exportItem.addEventListener('click', () => {
@@ -152,11 +157,23 @@ export function initPdfExport(options) {
     closeMenu();
     exportPdf();
   });
+  zipItem?.addEventListener('click', () => {
+    if (zipItem.getAttribute('aria-disabled') === 'true') return;
+    closeMenu();
+    exportMarkdownZip();
+  });
   menuList.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       e.preventDefault();
       closeMenu();
       menuButton.focus();
+    } else if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) {
+      e.preventDefault();
+      const items = [...menuList.querySelectorAll('[role="menuitem"]')];
+      const index = items.indexOf(document.activeElement);
+      const next = e.key === 'Home' ? 0 : e.key === 'End' ? items.length - 1
+        : (index + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+      items[next]?.focus();
     }
   });
   // Tab 등으로 포커스가 메뉴 밖으로 나가면 닫는다.
@@ -198,13 +215,52 @@ function openMenu() {
   exportItem.setAttribute('aria-disabled', target ? 'false' : 'true');
   exportItem.textContent = target && target.kind === 'pdf' ? '원본 PDF 다운로드' : 'PDF로 저장…';
   exportItem.title = target ? '' : '먼저 문서를 선택하세요';
+  updateZipItem();
   menuList.hidden = false;
   menuButton.setAttribute('aria-expanded', 'true');
+}
+
+function updateZipItem() {
+  if (!zipItem) return;
+  const target = getMarkdownTarget();
+  zipItem.setAttribute('aria-disabled', zipBusy || !target ? 'true' : 'false');
+  zipItem.setAttribute('aria-busy', zipBusy ? 'true' : 'false');
+  zipItem.textContent = zipBusy ? 'ZIP 생성 중…' : '마크다운 ZIP으로 저장…';
+  zipItem.title = zipBusy ? 'ZIP을 생성하고 있습니다' : target ? '' : '마크다운 문서를 먼저 선택하세요';
 }
 
 function closeMenu() {
   menuList.hidden = true;
   menuButton.setAttribute('aria-expanded', 'false');
+}
+
+/** 현재 마크다운 전체 원문과 다이어그램을 일반 뷰어용 ZIP으로 저장한다. */
+export async function exportMarkdownZip() {
+  if (zipBusy) return;
+  const target = getMarkdownTarget();
+  if (!target) {
+    showToast('ZIP으로 저장할 마크다운 문서를 먼저 선택하세요.', { error: true });
+    return;
+  }
+  zipBusy = true;
+  updateZipItem();
+  showToast('ZIP 생성 중…');
+  try {
+    const { createMarkdownZip } = await import('./markdown-export.js');
+    const { blob } = await createMarkdownZip(target.markdown);
+    const url = URL.createObjectURL(blob);
+    try {
+      downloadOriginal(url, `${exportBaseName(target.name)}.zip`);
+    } finally {
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+    showToast('마크다운 ZIP이 다운로드되었습니다.');
+  } catch (error) {
+    showToast(`ZIP 생성 실패: ${error.message || error}`, { error: true });
+  } finally {
+    zipBusy = false;
+    updateZipItem();
+  }
 }
 
 /** 현재 문서를 PDF로 내보낸다. */

@@ -30,7 +30,7 @@ JSON은 `app_store_connect_api` 아래 `key_id`, `issuer_id`, `key_path`(또는 
 
 다른 팀의 인증서를 사용하려면 `SIGN_IDENTITY` 환경변수에 키체인의 Developer ID Application 이름 또는 SHA-1 지문을 지정합니다. 기본값은 제공된 `developer-id-application-20261031.cer`의 SHA-1 지문 `8102033CFEB5309D454652A5CCC4E20B784585D4`입니다. 동일 이름의 다른 인증서와 혼동하지 않도록 지문으로 지정합니다.
 
-설치 프로그램 인증서는 `INSTALLER_SIGN_IDENTITY`로 지정합니다. 기본값은 `Developer ID Installer: Mediawave (23B9Q752EU)`입니다. 2026-11-06 발급한 인증서의 SHA-1 지문은 `716A9D6AB92FDDCD230C5E7D8C1C117159CF7E55`입니다. 앱용 인증서로 PKG를 서명해서는 안 됩니다. [Apple의 패키지 서명 안내](https://developer.apple.com/documentation/security/resolving-common-notarization-issues)를 따릅니다.
+설치 프로그램 인증서는 `INSTALLER_SIGN_IDENTITY`로 지정합니다. 기본값은 2026-11-09 발급한 `Developer ID Installer: Mediawave (23B9Q752EU)` 인증서의 SHA-1 지문 `884593FADCB9B8FD13EB205B2DEEB724AEF0A78F`입니다. 인증서와 대응하는 전용 개인 키는 외부 `AppStore_등록_재사용` 폴더에 보관합니다. 앱용 인증서로 PKG를 서명해서는 안 됩니다. [Apple의 패키지 서명 안내](https://developer.apple.com/documentation/security/resolving-common-notarization-issues)를 따릅니다.
 
 로컬 패키징 확인만 할 때:
 

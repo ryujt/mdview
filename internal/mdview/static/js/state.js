@@ -1,7 +1,7 @@
 export function stateToMermaid(input) {
   let mermaidCode = "graph LR\n";
-  const stateNodeMap = {};
-  let stateNodeCounter = 65;
+  const stateNodeMap = Object.create(null);
+  let stateNodeCounter = 0;
   const nodeStyles = [];
   const links = [];
   const nodeDefinitions = {};
@@ -35,7 +35,9 @@ export function stateToMermaid(input) {
 
     let identifier = stateNodeMap[processedName];
     if (!identifier) {
-      identifier = String.fromCharCode(stateNodeCounter++);
+      // Preserve existing A–Z identifiers, then use valid Mermaid identifiers.
+      identifier = stateNodeCounter < 26 ? String.fromCharCode(65 + stateNodeCounter) : `S${stateNodeCounter}`;
+      stateNodeCounter++;
       stateNodeMap[processedName] = identifier;
 
       const escapedName = processedName

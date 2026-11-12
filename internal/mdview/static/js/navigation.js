@@ -1,6 +1,7 @@
 export function navigationToMermaid(input) {
   let mermaidCode = "graph LR\n";
-  const nodeMap = {};
+  // Diagram labels are user data, including names such as __proto__.
+  const nodeMap = Object.create(null);
   const nodeStyles = [];
   let nodeCounter = 0;
   const links = [];

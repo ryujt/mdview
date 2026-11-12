@@ -943,7 +943,7 @@ body.html-preview #preview {
 @media (hover: none) { .preview-media-expand, .preview-media-copy { opacity: 1; } }
 @media print { .preview-media-expand, .preview-media-copy, .preview-media-dialog { display: none; } }
 
-/* 내보내기 메뉴 (PDF 저장) */
+/* 내보내기 메뉴 (PDF·마크다운 ZIP 저장) */
 #export-menu-wrap { position: relative; }
 #export-menu-button {
   height: 28px;
@@ -958,7 +958,7 @@ body.html-preview #preview {
   white-space: nowrap;
 }
 #export-menu-button:hover, #export-menu-button[aria-expanded="true"] { background: #f3f4f6; border-color: #0366d6; }
-#export-menu-button:focus-visible, #export-pdf:focus-visible { outline: 2px solid #b6d8ff; outline-offset: 1px; }
+#export-menu-button:focus-visible, #export-menu [role="menuitem"]:focus-visible { outline: 2px solid #b6d8ff; outline-offset: 1px; }
 #export-menu {
   position: absolute;
   top: calc(100% + 4px);
@@ -972,7 +972,7 @@ body.html-preview #preview {
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
 }
 #export-menu[hidden] { display: none; }
-#export-pdf {
+#export-menu [role="menuitem"] {
   display: block;
   width: 100%;
   padding: 6px 10px;
@@ -986,8 +986,8 @@ body.html-preview #preview {
   cursor: pointer;
   white-space: nowrap;
 }
-#export-pdf:hover:not([aria-disabled="true"]) { background: #0366d6; color: #ffffff; }
-#export-pdf[aria-disabled="true"] { color: #8c959f; cursor: default; }
+#export-menu [role="menuitem"]:hover:not([aria-disabled="true"]) { background: #0366d6; color: #ffffff; }
+#export-menu [role="menuitem"][aria-disabled="true"] { color: #8c959f; cursor: default; }
 
 /* 인쇄 동안만 만드는 코드뷰어 대체 표 (화면에서는 숨김) */
 #preview .code-print { display: none; }

@@ -14,6 +14,7 @@
 - 표준 마크다운 (GFM) + 코드 블록 syntax highlighting + 복사 버튼
 - 커스텀 다이어그램: `mermaid`, `state`, `navigation`, `layout`, `jobflow`
 - **오디오 녹화**: 상단 툴바의 녹화 버튼으로 문서/코드를 보며 음성 설명을 녹음하고, 녹음 중 참조한 위치(파일 열람·텍스트 복사·라인 클릭)를 오디오 시간축에 맞춰 JSON으로 기록합니다. 입력 장치(마이크)를 드롭다운으로 선택할 수 있고, 녹음 중 입력 레벨이 표시됩니다.
+- **마크다운 ZIP으로 저장**: 마크다운 문서를 연 뒤 상단의 「내보내기 ▾ → 마크다운 ZIP으로 저장…」을 선택합니다. 현재 파일 전체를 `document.md`로 담고, 네비게이션(`navigation`)·상태도(`state`)는 Mermaid 코드로 변환합니다. 잡플로우(`jobflow`)는 `images/`의 PNG 파일로 저장해 Markdown에서 상대 경로로 참조하며, 기존 Mermaid 코드는 유지합니다. 압축을 푼 폴더 구조를 유지한 채 `document.md`를 Mermaid 지원 Markdown 뷰어에서 열면 됩니다.
 - **PDF로 저장**: 상단 툴바의 「내보내기 ▾ → PDF로 저장…」(또는 ⌘P / Ctrl+P)으로 선택한 문서를 PDF로 저장합니다. 마크다운·코드는 브라우저 인쇄 대화상자의 「PDF로 저장」을 쓰고, HTML은 뷰어 UI 없이 원본 문서만 인쇄하며, PDF 파일은 원본을 그대로 다운로드합니다.
 - **프롬프트 생성**: 녹화 저장 후 발화와 문서 조작을 시간순 텍스트로 정리한 `prompt.txt`가 항상 만들어집니다(API 키가 없으면 조작 기록만으로). 완료 토스트의 「prompt.txt 열기」로 바로 볼 수 있고, 그 내용을 AI에게 붙여 넣으면 됩니다.
 - **전사**: 녹화 저장 시 OpenAI `whisper-1` API로 **자동 전사**되어(API 키 필요) 발화 세그먼트 타임스탬프와 참조 이벤트를 병합한 `transcript.json` 문서가 생성됩니다. 완료되면 파일의 전체 내용을 시스템 클립보드에 자동 복사하고 시스템 알림과 화면 토스트로 알려줍니다. 진행 상태는 툴바 칩으로 표시됩니다. 수동 실행은 `mdview transcribe`.
@@ -22,7 +23,7 @@
 
 ## 사용자용 설치 — Apple Silicon Mac
 
-`mdview-1.0.3-macos-arm64.pkg`를 더블클릭하고 설치를 완료하면 앱과 CLI가 함께 설치됩니다.
+`mdview-1.0.4-macos-arm64.pkg`를 더블클릭하고 설치를 완료하면 앱과 CLI가 함께 설치됩니다.
 응용 프로그램에서 mdview를 실행하거나 터미널에서 바로 `mdview`를 입력하세요.
 CLI는 `/usr/local/bin/mdview`에 자동 연결되며 이 Mac의 다른 사용자도 사용할 수 있습니다.
 Go·Homebrew·별도의 터미널 설정은 필요하지 않습니다. macOS 13 이상 Apple Silicon Mac을 지원하며,
@@ -227,7 +228,8 @@ cli/mdview/
         css/
         js/
           recorder.js        # 녹음 + 이벤트 타임라인 기록 Worker
-          pdf-export.js      # 툴바 「내보내기 → PDF로 저장」 Worker
+          pdf-export.js      # 툴바 「내보내기 → PDF·마크다운 ZIP 저장」
+          markdown-export.js # Mermaid 변환·잡플로우 PNG·ZIP 생성
           ...
 ```
 

@@ -25,7 +25,7 @@ const emptyState = document.getElementById('empty-state');
 const currentBlocksRef = { current: [], transformed: '' };
 
 // 녹화 이벤트 기록에 사용하는 현재 파일 원본 텍스트
-const contentRef = { raw: '' };
+const contentRef = { raw: '', file: null };
 
 // 현재 폴더 모드에서 사용자가 선택한 상대 경로 (슬래시 구분)
 let activeRelPath = null;
@@ -65,6 +65,7 @@ function setEmptyState(visible) {
 // 활성 파일이 PDF면 WS가 텍스트 내용을 싣지 않으므로(변경 신호만 수신)
 // 어떤 호출 경로로 오든 URL에서 다시 렌더링한다.
 function renderContent(text) {
+  contentRef.file = activeFileName;
   const html = activeFileName && isHtmlPath(activeFileName);
   document.body.classList.toggle('html-preview', Boolean(html));
   if (html) {
@@ -99,6 +100,7 @@ function renderActivePdf() {
   document.body.classList.remove('html-preview');
   setEmptyState(false);
   contentRef.raw = '';
+  contentRef.file = activeFileName;
   currentBlocksRef.current = [];
   currentBlocksRef.transformed = '';
   return renderPDF(activeDocumentUrl(pdfCacheBust), preview);
@@ -116,6 +118,13 @@ function exportTarget() {
   if (isHtmlPath(activeFileName)) return { kind: 'html', name: activeFileName, url: activeDocumentUrl(htmlCacheBust) };
   if (isPdfPath(activeFileName)) return { kind: 'pdf', name: activeFileName, url: activeDocumentUrl(pdfCacheBust) };
   return { kind: 'page', name: activeFileName };
+}
+
+// 내보내기는 렌더링된 DOM이 아닌 현재 파일 전체 원문을 사용한다.
+// 파일 전환 중이거나 읽기에 실패한 경우 이전 문서를 새 이름으로 저장하지 않는다.
+function markdownExportTarget() {
+  if (!activeFileName || preview.hidden || contentRef.file !== activeFileName || !isMarkdownPath(activeFileName)) return null;
+  return { name: activeFileName, markdown: contentRef.raw };
 }
 
 function fileBaseName(p) {
@@ -182,6 +191,7 @@ async function selectFile(relPath, options = {}) {
   rememberScroll();
   activeRelPath = relPath;
   activeFileName = relPath;
+  contentRef.file = null;
   setFilenameDisplay(relPath);
   revealFile(relPath);
 
@@ -224,6 +234,7 @@ async function selectFile(relPath, options = {}) {
 }
 
 function showFileError(relPath) {
+  contentRef.file = null;
   document.body.classList.remove('html-preview');
   const message = document.createElement('p');
   message.style.color = '#dc3545';
@@ -245,6 +256,7 @@ function deselectFile({ pushHistory = true } = {}) {
   activeRelPath = null;
   activeFileName = null;
   contentRef.raw = '';
+  contentRef.file = null;
   currentBlocksRef.current = [];
   currentBlocksRef.transformed = '';
   setFilenameDisplay(modeInfo ? modeInfo.root : '');
@@ -358,7 +370,7 @@ async function bootstrap() {
       if (folderMode) selectFile(relPath);
     },
   });
-  initPdfExport({ getTarget: exportTarget });
+  initPdfExport({ getTarget: exportTarget, getMarkdownTarget: markdownExportTarget });
 
   if (info.mode === 'file') {
     activeFileName = info.filename;

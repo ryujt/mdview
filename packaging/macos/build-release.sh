@@ -25,7 +25,7 @@ if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     exit 1
 fi
 SIGN_IDENTITY="${SIGN_IDENTITY:-8102033CFEB5309D454652A5CCC4E20B784585D4}"
-INSTALLER_SIGN_IDENTITY="${INSTALLER_SIGN_IDENTITY:-Developer ID Installer: Mediawave (23B9Q752EU)}"
+INSTALLER_SIGN_IDENTITY="${INSTALLER_SIGN_IDENTITY:-884593FADCB9B8FD13EB205B2DEEB724AEF0A78F}"
 COMMIT="$(git rev-parse --short=12 HEAD)"
 if [[ -n "$(git status --porcelain -- .)" ]]; then COMMIT="$COMMIT-dirty"; fi
 BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
