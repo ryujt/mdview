@@ -21,12 +21,12 @@ func readFixture(t *testing.T, dir, name string) string {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Join(dir, name))
 	if err != nil {
-		t.Fatalf("%s 읽기 실패: %v", name, err)
+		t.Fatalf("failed to read %s: %v", name, err)
 	}
 	return string(data)
 }
 
-// pipelineFixture는 오디오와 events.json이 들어 있는 녹화 디렉토리를 만든다.
+// pipelineFixture creates a recording directory containing audio and events.json.
 func pipelineFixture(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -35,7 +35,7 @@ func pipelineFixture(t *testing.T) string {
 		Version: 1, Mode: "folder", Root: "/proj", StartedAt: "2026-10-18T14:03:11+09:00",
 		DurationMs: 30000, Audio: "audio.webm",
 		Events: []RecordingEvent{
-			{T: 1000, Type: "focus", File: "doc.md", Line: 3, LineEnd: 3, Text: "본문"},
+			{T: 1000, Type: "focus", File: "doc.md", Line: 3, LineEnd: 3, Text: "body"},
 			{T: 12345, Type: "copy", File: "doc.md", Line: 5, LineEnd: 5, Text: "12,345", Selection: "12,345"},
 		},
 	}
@@ -47,7 +47,7 @@ func pipelineFixture(t *testing.T) string {
 	return dir
 }
 
-// 키가 없어도 조작 기록만으로 prompt.txt가 만들어져야 한다.
+// Without a key, prompt.txt should still be built from the action log alone.
 func TestPipelineWithoutTranscription(t *testing.T) {
 	t.Setenv(openaiKeyEnv, "")
 	setTestHome(t, t.TempDir())
@@ -58,29 +58,29 @@ func TestPipelineWithoutTranscription(t *testing.T) {
 		t.Fatalf("job.State = %q (%s)", job.State, job.Error)
 	}
 	if job.Transcript != "" {
-		t.Errorf("전사를 생략했는데 transcript 경로가 있음: %q", job.Transcript)
+		t.Errorf("transcription was skipped but a transcript path is set: %q", job.Transcript)
 	}
-	if !strings.Contains(job.Note, "API 키") {
-		t.Errorf("job.Note에 키 없음 사유가 없음: %q", job.Note)
+	if !strings.Contains(job.Note, ErrNoOpenAIKey.Error()) {
+		t.Errorf("job.Note lacks the missing-key reason: %q", job.Note)
 	}
 	if _, err := os.Stat(filepath.Join(dir, transcriptFileName)); !os.IsNotExist(err) {
-		t.Error("전사를 생략했는데 transcript.json이 생성됨")
+		t.Error("transcription was skipped but transcript.json was created")
 	}
 	if job.Prompt != filepath.Join(dir, promptFileName) {
 		t.Errorf("job.Prompt = %q", job.Prompt)
 	}
 	text := readFixture(t, dir, promptFileName)
-	if !strings.Contains(text, promptNoSpeech) || !strings.Contains(text, `[00:12] 복사: "12,345" (doc.md:5)`) {
-		t.Errorf("프롬프트 내용 불일치:\n%s", text)
+	if !strings.Contains(text, promptNoSpeech) || !strings.Contains(text, `[00:12] Copy: "12,345" (doc.md:5)`) {
+		t.Errorf("prompt content mismatch:\n%s", text)
 	}
 }
 
-// 전사 결과(audio.json)가 이미 있으면 API 없이 재사용해 transcript.json과 prompt.txt를 모두 만든다.
+// If a transcription result (audio.json) exists, reuse it without the API and build both transcript.json and prompt.txt.
 func TestPipelineWithExistingTranscription(t *testing.T) {
 	t.Setenv(openaiKeyEnv, "sk-test")
 	dir := pipelineFixture(t)
 	writeFixture(t, dir, "audio.json",
-		`{"text":"지표가 이상해요","language":"ko","segments":[{"start":3.0,"end":6.0,"text":" 지표가 이상해요"}]}`)
+		`{"text":"The metrics look wrong","language":"en","segments":[{"start":3.0,"end":6.0,"text":" The metrics look wrong"}]}`)
 
 	job := NewPipeline().Run(dir)
 	if job.State != TranscribeStateDone {
@@ -90,14 +90,14 @@ func TestPipelineWithExistingTranscription(t *testing.T) {
 		t.Errorf("job.Transcript = %q", job.Transcript)
 	}
 	if job.Note != "" {
-		t.Errorf("전사를 재사용했는데 job.Note = %q", job.Note)
+		t.Errorf("transcription was reused but job.Note = %q", job.Note)
 	}
 	if _, err := os.Stat(job.Transcript); err != nil {
-		t.Errorf("transcript.json이 없음: %v", err)
+		t.Errorf("transcript.json missing: %v", err)
 	}
 	text := readFixture(t, dir, promptFileName)
-	if !strings.Contains(text, "발화 1개") || !strings.Contains(text, "[00:03] 말: 지표가 이상해요") {
-		t.Errorf("발화가 반영되지 않음:\n%s", text)
+	if !strings.Contains(text, "Speech segments: 1") || !strings.Contains(text, "[00:03] Speech: The metrics look wrong") {
+		t.Errorf("speech not reflected:\n%s", text)
 	}
 }
 
@@ -107,7 +107,7 @@ func TestPipelineFailsWithoutMeta(t *testing.T) {
 	dir := t.TempDir()
 	writeFixture(t, dir, "audio.webm", "FAKEAUDIO")
 	if job := NewPipeline().Run(dir); job.State != TranscribeStateError {
-		t.Errorf("%s 이 없는데 성공으로 처리됨: %q", eventsFileName, job.State)
+		t.Errorf("%s is missing but treated as success: %q", eventsFileName, job.State)
 	}
 }
 
@@ -115,18 +115,18 @@ func TestTranscribeSkipReason(t *testing.T) {
 	t.Setenv(openaiKeyEnv, "")
 	setTestHome(t, t.TempDir())
 	dir := pipelineFixture(t)
-	if reason := TranscribeSkipReason(dir, DefaultTranscribeModel); !strings.Contains(reason, "API 키") {
-		t.Errorf("키 없음 사유가 아님: %q", reason)
+	if reason := TranscribeSkipReason(dir, DefaultTranscribeModel); !strings.Contains(reason, ErrNoOpenAIKey.Error()) {
+		t.Errorf("not a missing-key reason: %q", reason)
 	}
 	if reason := TranscribeSkipReason(dir, localWhisperDefault); reason != "" {
-		t.Errorf("로컬 모델은 키와 무관해야 함: %q", reason)
+		t.Errorf("local models should not depend on the key: %q", reason)
 	}
 	t.Setenv(openaiKeyEnv, "sk-test")
 	if reason := TranscribeSkipReason(dir, DefaultTranscribeModel); reason != "" {
-		t.Errorf("키가 있으면 생략하지 않아야 함: %q", reason)
+		t.Errorf("should not skip when a key is present: %q", reason)
 	}
-	if reason := TranscribeSkipReason(t.TempDir(), DefaultTranscribeModel); !strings.Contains(reason, "오디오") {
-		t.Errorf("오디오 없음 사유가 아님: %q", reason)
+	if reason := TranscribeSkipReason(t.TempDir(), DefaultTranscribeModel); !strings.Contains(reason, "audio") {
+		t.Errorf("not a missing-audio reason: %q", reason)
 	}
 }
 
@@ -143,13 +143,13 @@ func TestRunAfterTranscribeWithoutTranscriptFile(t *testing.T) {
 		t.Fatalf("State = %v, error=%q", job.State, job.Error)
 	}
 	if job.Prompt == "" {
-		t.Error("Prompt가 비어 있음")
+		t.Error("Prompt is empty")
 	}
 	if job.Transcript != "" {
-		t.Errorf("transcript.json이 없는데 Transcript = %q", job.Transcript)
+		t.Errorf("transcript.json is absent but Transcript = %q", job.Transcript)
 	}
-	if prompt := readFixture(t, dir, promptFileName); !strings.Contains(prompt, "메인 함수는 이렇게 생겼고") {
-		t.Errorf("프롬프트에 발화가 없음:\n%s", prompt)
+	if prompt := readFixture(t, dir, promptFileName); !strings.Contains(prompt, "the main function looks like this") {
+		t.Errorf("prompt has no speech:\n%s", prompt)
 	}
 }
 
@@ -159,8 +159,8 @@ func TestTranscribeSkipReasonOversizedAudio(t *testing.T) {
 	if err := os.Truncate(filepath.Join(dir, "audio.webm"), maxAPIAudioBytes+1); err != nil {
 		t.Fatal(err)
 	}
-	if reason := TranscribeSkipReason(dir, DefaultTranscribeModel); !strings.Contains(reason, "상한") {
-		t.Errorf("상한 초과 사유가 아님: %q", reason)
+	if reason := TranscribeSkipReason(dir, DefaultTranscribeModel); !strings.Contains(reason, "limit") {
+		t.Errorf("not an over-limit reason: %q", reason)
 	}
 }
 
@@ -169,7 +169,7 @@ func TestPipelineRunDoesNotTranscribeWithoutMeta(t *testing.T) {
 	dir := t.TempDir()
 	writeFixture(t, dir, "audio.webm", "FAKEAUDIO")
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Errorf("전사 API가 호출됨")
+		t.Errorf("transcription API was called")
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer srv.Close()

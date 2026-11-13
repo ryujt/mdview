@@ -1,10 +1,10 @@
-// pdf-viewer.js — PDF 문서 렌더링 Worker
+// pdf-viewer.js — PDF document rendering Worker
 //
-// pdf.js(CDN, 버전 고정)를 지연 로드해 페이지별 캔버스 + 텍스트 레이어를 그린다.
-// 첫 페이지만 즉시 렌더하고 나머지는 같은 크기의 자리표시자로 문서 높이를 먼저
-// 확보한 뒤, 뷰포트에 다가올 때 렌더한다 — 대형 PDF도 열자마자 스크롤을 복원할 수 있다.
-// 텍스트 레이어가 있어야 본문 선택/복사가 가능하고, 녹화(recorder.js)가
-// .pdf-page 요소의 data-page-number와 클릭 좌표로 참조 위치를 기록할 수 있다.
+// Lazily loads pdf.js (CDN, pinned version) and draws a canvas + text layer per page.
+// Only the first page is rendered immediately; the rest first reserve document height with
+// same-size placeholders and render as they near the viewport — so even large PDFs can restore scroll on open.
+// The text layer enables text selection/copy, and lets recording (recorder.js) log reference
+// locations using the .pdf-page element's data-page-number and click coordinates.
 
 const PDFJS_VERSION = '4.8.69';
 const PDFJS_URL = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VERSION}/build/pdf.min.mjs`;
@@ -30,7 +30,7 @@ function loadPdfjs() {
       lib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_URL;
       return lib;
     });
-    // 로드 실패(네트워크 등) 시 다음 시도에서 다시 로드할 수 있게 한다.
+    // On load failure (network, etc.), allow reloading on the next attempt.
     pdfjsPromise.catch(() => {
       pdfjsPromise = null;
     });
@@ -39,9 +39,9 @@ function loadPdfjs() {
 }
 
 /**
- * 진행 중인 PDF 로딩/렌더를 중단한다.
- * PDF가 아닌 문서로 전환하거나 선택을 해제할 때 호출해, 늦게 완료된
- * 렌더가 새 화면을 덮어쓰지 않게 한다 (renderPDF도 시작 시 호출).
+ * Cancels any in-progress PDF loading/rendering.
+ * Called when switching to a non-PDF document or clearing the selection, so a late-finishing
+ * render does not overwrite the new view (renderPDF also calls it on start).
  */
 export function cancelPdfRender() {
   renderSeq += 1;
@@ -56,16 +56,16 @@ export function cancelPdfRender() {
 }
 
 /**
- * PDF를 container에 렌더링한다. 첫 페이지 렌더와 전체 자리표시자 배치가
- * 끝나면 resolve된다 (문서 전체 높이가 확보되어 스크롤 복원이 가능한 시점).
- * 렌더 도중 다른 문서로 전환되면(새 renderPDF 호출 또는 cancelPdfRender) 조용히 중단한다.
- * @param {string} url  PDF 원본 URL (세그먼트 인코딩된 경로)
- * @param {HTMLElement} container  렌더링 대상 요소
+ * Renders a PDF into container. Resolves once the first page is rendered and all placeholders
+ * are laid out (the point where the full document height is reserved and scroll can be restored).
+ * Stops silently if another document is opened mid-render (a new renderPDF call or cancelPdfRender).
+ * @param {string} url  Original PDF URL (segment-encoded path)
+ * @param {HTMLElement} container  Element to render into
  */
 export async function renderPDF(url, container) {
   cancelPdfRender();
   const seq = renderSeq;
-  showNotice(container, 'pdf-loading', 'PDF 불러오는 중…');
+  showNotice(container, 'pdf-loading', 'Loading PDF…');
 
   let pdfjs;
   let doc;
@@ -76,7 +76,7 @@ export async function renderPDF(url, container) {
     doc = await activeLoadingTask.promise;
   } catch (err) {
     if (seq !== renderSeq) return;
-    showNotice(container, 'pdf-error', `PDF를 불러오지 못했습니다: ${err && err.message ? err.message : err}`);
+    showNotice(container, 'pdf-error', `Failed to load PDF: ${err && err.message ? err.message : err}`);
     return;
   }
   if (seq !== renderSeq) return;
@@ -98,15 +98,15 @@ export async function renderPDF(url, container) {
     }
     observePendingPages(pdfjs, doc, viewer, seq);
   } catch {
-    if (seq !== renderSeq) return; // 전환으로 인한 취소는 정상 흐름
+    if (seq !== renderSeq) return; // Cancellation due to switching is a normal flow
     const notice = document.createElement('div');
     notice.className = 'pdf-error';
-    notice.textContent = 'PDF 페이지 렌더링 중 오류가 발생했습니다.';
+    notice.textContent = 'An error occurred while rendering a PDF page.';
     viewer.appendChild(notice);
   }
 }
 
-// 컨테이너 폭에 맞는 페이지 viewport를 계산한다 (fit-width).
+// Computes a page viewport that fits the container width (fit-width).
 function fitViewport(page, viewer) {
   const base = page.getViewport({ scale: 1 });
   const availWidth = viewer.clientWidth || FALLBACK_PAGE_WIDTH;
@@ -122,7 +122,7 @@ function createPageElement(pageNumber, viewport) {
   return pageEl;
 }
 
-// 아직 렌더되지 않은 페이지의 자리표시자. 첫 페이지 크기로 추정해 문서 높이를 확보한다.
+// Placeholder for a page not yet rendered. Reserves document height using the first page's size as an estimate.
 function createPendingPageElement(pageNumber, estimatedViewport) {
   const pageEl = createPageElement(pageNumber, estimatedViewport);
   pageEl.classList.add('pdf-page-pending');
@@ -135,7 +135,7 @@ function sizePageElement(pageEl, viewport) {
   pageEl.style.setProperty('--scale-factor', String(viewport.scale));
 }
 
-// 자리표시자 페이지가 뷰포트에 다가오면 실제 렌더링한다.
+// Render placeholder pages for real as they approach the viewport.
 function observePendingPages(pdfjs, doc, viewer, seq) {
   const pending = viewer.querySelectorAll('.pdf-page-pending');
   if (pending.length === 0) return;
@@ -163,7 +163,7 @@ async function renderPendingPage(pdfjs, doc, viewer, pageEl, seq) {
     if (seq !== renderSeq) return;
     pageEl.classList.remove('pdf-page-pending');
   } catch {
-    // 취소되었거나 페이지 렌더에 실패한 경우 — 자리표시자를 그대로 둔다
+    // Cancelled or page render failed — leave the placeholder in place
   }
 }
 
@@ -197,7 +197,7 @@ async function renderPageInto(pdfjs, page, pageEl, viewport) {
       }).promise;
     }
   } catch {
-    // 텍스트 레이어 실패는 선택/복사만 제한될 뿐 캔버스 표시에는 영향 없음
+    // A text layer failure only limits selection/copy; the canvas display is unaffected
   }
 }
 

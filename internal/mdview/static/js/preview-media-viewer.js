@@ -1,7 +1,7 @@
 const DIAGRAM_SELECTOR = '.mermaid, .jobflow-diagram, .layout-diagram';
 const COPY_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg>';
 const COPIED_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg>';
-const COPY_LABEL = '다이어그램 코드 복사';
+const COPY_LABEL = 'Copy diagram code';
 const COPY_RESET_DELAY_MS = 2000;
 const EXPAND_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5M3 3l6 6m12-6-6 6M3 21l6-6m12 6-6-6"/></svg>';
 
@@ -24,12 +24,12 @@ export function initPreviewMediaViewer(preview) {
     close();
     const dialog = document.createElement('dialog');
     dialog.className = 'preview-media-dialog';
-    dialog.setAttribute('aria-label', node.tagName === 'IMG' ? '이미지 전체 화면' : '다이어그램 전체 화면');
+    dialog.setAttribute('aria-label', node.tagName === 'IMG' ? 'Image full screen' : 'Diagram full screen');
     const closeButton = document.createElement('button');
     closeButton.type = 'button';
     closeButton.className = 'preview-media-close';
-    closeButton.setAttribute('aria-label', '전체 화면 닫기');
-    closeButton.title = '닫기 (Esc)';
+    closeButton.setAttribute('aria-label', 'Close full screen');
+    closeButton.title = 'Close (Esc)';
     closeButton.autofocus = true;
     closeButton.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg>';
     closeButton.addEventListener('click', close);
@@ -75,12 +75,12 @@ export function initPreviewMediaViewer(preview) {
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'preview-media-expand';
-      button.title = node.tagName === 'IMG' ? '이미지 전체 화면 보기' : '다이어그램 전체 화면 보기';
+      button.title = node.tagName === 'IMG' ? 'View image full screen' : 'View diagram full screen';
       button.setAttribute('aria-label', button.title);
       button.innerHTML = EXPAND_ICON;
       node.before(wrapper);
       wrapper.append(node, button);
-      // 다이어그램은 확대 버튼 왼쪽에 원본 코드 복사 버튼을 둔다.
+      // Diagrams get a source-code copy button to the left of the expand button.
       if (node.tagName !== 'IMG' && node.dataset.source != null) {
         const copyButton = document.createElement('button');
         copyButton.type = 'button';
@@ -123,8 +123,8 @@ export function initPreviewMediaViewer(preview) {
 }
 
 /**
- * 다이어그램 코드를 시작·끝 펜스(```lang ... ```)까지 포함한 마크다운 코드 블록으로 만든다.
- * 코드 안에 백틱 연속이 있으면 그보다 긴 펜스를 쓴다.
+ * Builds a Markdown code block from diagram code, including the opening and closing fences (```lang ... ```).
+ * If the code contains a run of backticks, a longer fence is used.
  */
 export function fencedSource(code, lang) {
   const body = String(code).replace(/\n+$/, '');
@@ -139,19 +139,19 @@ async function copyDiagramSource(button) {
   try {
     await writeClipboard(text);
   } catch {
-    button.title = '복사하지 못했습니다';
+    button.title = 'Copy failed';
     return;
   }
   button.innerHTML = COPIED_ICON;
   button.classList.add('copied');
-  button.title = '복사됨';
+  button.title = 'Copied';
   clearTimeout(button._resetTimer);
   button._resetTimer = setTimeout(() => {
     button.innerHTML = COPY_ICON;
     button.classList.remove('copied');
     button.title = COPY_LABEL;
   }, COPY_RESET_DELAY_MS);
-  // 녹화 Worker가 다이어그램 복사도 copy 이벤트로 기록할 수 있게 알린다.
+  // Notify the recording Worker so diagram copies can also be logged as copy events.
   document.dispatchEvent(new CustomEvent('mdview:manualcopy', { detail: { text, el: button } }));
 }
 
@@ -161,7 +161,7 @@ async function writeClipboard(text) {
       await navigator.clipboard.writeText(text);
       return;
     } catch {
-      /* 권한·포커스 문제면 아래 방식으로 재시도 */
+      /* On permission/focus problems, retry with the method below */
     }
   }
   const area = document.createElement('textarea');

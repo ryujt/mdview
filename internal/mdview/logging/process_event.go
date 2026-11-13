@@ -1,11 +1,11 @@
-// Package logging은 mdview의 2계층 로깅 시스템이다.
+// Package logging is mdview's two-tier logging system.
 //
-// 1계층: 콘솔+파일 동시 기록하는 한 줄 텍스트 로그 (Debug/Info/Warn/Error)
-// 2계층: 한 줄로 담을 수 없는 구조화 데이터를 카테고리별 파일로 저장
-//   - whisper/   전사(whisper-1 API / 로컬 CLI) 호출 상세
-//   - recording/ 녹화 업로드 저장 상세
-//   - state/     상태 스냅샷 (JSON)
-//   - process/   세션 프로세스 플로우 다이어그램 (Mermaid)
+// Tier 1: one-line text logs written to both console and file (Debug/Info/Warn/Error)
+// Tier 2: structured data that does not fit on one line, saved to per-category files
+//   - whisper/   transcription call details (whisper-1 API / local CLI)
+//   - recording/ recording upload details
+//   - state/     state snapshots (JSON)
+//   - process/   session process flow diagrams (Mermaid)
 package logging
 
 import (
@@ -15,21 +15,21 @@ import (
 	"time"
 )
 
-// ProcessEvent는 파이프라인의 단일 단계를 기록한다.
-// 모든 이벤트는 오케스트레이터 관점에서 기록된다 — 워커가 자기 자신의 진행을
-// 기록하지 않고, 워커의 결과를 받아 다음 단계로 보내는 쪽이 기록한다.
+// ProcessEvent records a single pipeline step.
+// All events are recorded from the orchestrator's perspective: workers do not log
+// their own progress; whoever receives a worker's result and dispatches the next step does.
 type ProcessEvent struct {
 	Timestamp time.Time
 	Phase     string // "start" | "strategy" | "execution" | "synthesis" | "decision" | "end"
 	EventType string // "start" | "end" | "step_ok" | "step_err" | "branch_ok" | "branch_fail" | "error"
 	NodeLabel string
 
-	ArtifactPath string  // 상세 로그 파일 경로 (다이어그램 노드에서 click 링크)
-	Iteration    int     // fan-out/fan-in 그룹 번호
-	DurationMs   float64 // 참고용 소요 시간
+	ArtifactPath string  // detailed log file path (click link from the diagram node)
+	Iteration    int     // fan-out/fan-in group number
+	DurationMs   float64 // elapsed time, for reference
 }
 
-// EventOpts는 LogProcessEvent의 선택 메타데이터이다.
+// EventOpts holds optional metadata for LogProcessEvent.
 type EventOpts struct {
 	ArtifactPath string
 	Iteration    int
@@ -41,10 +41,10 @@ const (
 	nodePrefix  = "N"
 )
 
-// MermaidRenderer는 ProcessEvent 목록을 Mermaid flowchart 마크다운 문서로 변환한다.
+// MermaidRenderer converts a list of ProcessEvents into a Mermaid flowchart Markdown document.
 type MermaidRenderer struct{}
 
-// sanitizeLabel은 Mermaid 레이블에 쓸 수 없는 특수문자를 안전한 문자로 치환한다.
+// sanitizeLabel replaces characters not allowed in Mermaid labels with safe ones.
 func sanitizeLabel(text string) string {
 	r := strings.NewReplacer(
 		`"`, "'",
@@ -64,7 +64,7 @@ func sanitizeLabel(text string) string {
 	return out
 }
 
-// nodeShape는 phase에 따른 Mermaid 노드 형태 문자열을 반환한다.
+// nodeShape returns the Mermaid node shape string for the phase.
 func nodeShape(phase, label string) string {
 	switch phase {
 	case "start", "end":
@@ -76,7 +76,7 @@ func nodeShape(phase, label string) string {
 	}
 }
 
-// resolveCSSClass는 이벤트의 시각 스타일 클래스를 결정한다.
+// resolveCSSClass determines the visual style class for an event.
 func resolveCSSClass(ev ProcessEvent) string {
 	switch ev.Phase {
 	case "start":
@@ -102,8 +102,8 @@ func resolveCSSClass(ev ProcessEvent) string {
 	return "start"
 }
 
-// Render는 이벤트 목록을 세션 메타 + Mermaid 다이어그램 + 아티팩트 목록을 담은
-// 마크다운 문서로 렌더링한다. logDir는 아티팩트 상대 경로 계산 기준이다.
+// Render renders the events as a Markdown document containing session metadata,
+// a Mermaid diagram and the artifact list. logDir is the base for relative artifact paths.
 func (MermaidRenderer) Render(events []ProcessEvent, sessionID, logDir string) string {
 	if len(events) == 0 {
 		return "No process events recorded."
@@ -136,7 +136,7 @@ func (MermaidRenderer) Render(events []ProcessEvent, sessionID, logDir string) s
 	}
 	lines = append(lines, "")
 
-	// --- 엣지 구성 (fan-out / fan-in) ---
+	// --- Build edges (fan-out / fan-in) ---
 	iterStrategy := map[int]string{}
 	iterExec := map[int][]string{}
 	for i, ev := range events {
@@ -152,7 +152,7 @@ func (MermaidRenderer) Render(events []ProcessEvent, sessionID, logDir string) s
 	connected := map[[3]string]bool{}
 	addEdge := func(src, dst, label string) {
 		if label != "" {
-			// 동일 엣지의 무레이블 버전이 있으면 레이블 버전으로 교체한다.
+			// If an unlabeled version of the same edge exists, replace it with the labeled one.
 			unlabeled := [3]string{src, dst, ""}
 			if connected[unlabeled] {
 				delete(connected, unlabeled)
@@ -190,8 +190,8 @@ func (MermaidRenderer) Render(events []ProcessEvent, sessionID, logDir string) s
 			}
 			prev = nid
 		case "execution":
-			// 같은 iteration의 strategy가 있을 때만 fan-out(병렬)로 그린다.
-			// 전략 없는 실행 단계는 순차 체인으로 연결한다 (서버 기동 절차 등).
+			// Draw as fan-out (parallel) only when a strategy exists for the same iteration.
+			// Execution steps without a strategy are chained sequentially (e.g. server startup).
 			if snid, ok := iterStrategy[ev.Iteration]; ok {
 				addEdge(snid, nid, "")
 			} else {
@@ -218,7 +218,7 @@ func (MermaidRenderer) Render(events []ProcessEvent, sessionID, logDir string) s
 		}
 	}
 
-	// decision 분기 엣지 후처리
+	// Post-process decision branch edges
 	for i, ev := range events {
 		if ev.Phase != "decision" {
 			continue
@@ -243,7 +243,7 @@ func (MermaidRenderer) Render(events []ProcessEvent, sessionID, logDir string) s
 	}
 	lines = append(lines, "")
 
-	// click 링크 + 아티팩트 목록
+	// click links + artifact list
 	type artifactRow struct{ nid, etype, path string }
 	var artifacts []artifactRow
 	for i, ev := range events {
@@ -260,14 +260,14 @@ func (MermaidRenderer) Render(events []ProcessEvent, sessionID, logDir string) s
 		artifacts = append(artifacts, artifactRow{nodeIDs[i], ev.EventType, rel})
 	}
 
-	// --- 마크다운 문서 조합 ---
+	// --- Assemble Markdown document ---
 	var doc strings.Builder
 	doc.WriteString("# Process Flow\n\n")
-	doc.WriteString("| 항목 | 값 |\n|------|-----|\n")
+	doc.WriteString("| Field | Value |\n|------|-----|\n")
 	doc.WriteString(fmt.Sprintf("| Session ID | `%s` |\n", orDash(sessionID)))
-	doc.WriteString(fmt.Sprintf("| 시작 시각 | %s |\n", start.Format("2006-01-02 15:04:05")))
-	doc.WriteString(fmt.Sprintf("| 종료 시각 | %s |\n", end.Format("2006-01-02 15:04:05")))
-	doc.WriteString(fmt.Sprintf("| 소요 시간 | %.1fs |\n\n", duration))
+	doc.WriteString(fmt.Sprintf("| Start time | %s |\n", start.Format("2006-01-02 15:04:05")))
+	doc.WriteString(fmt.Sprintf("| End time | %s |\n", end.Format("2006-01-02 15:04:05")))
+	doc.WriteString(fmt.Sprintf("| Duration | %.1fs |\n\n", duration))
 
 	doc.WriteString("```mermaid\nflowchart TD\n")
 	for _, l := range lines {

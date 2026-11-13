@@ -12,12 +12,12 @@ import (
 
 const mockVerboseJSON = `{
   "task": "transcribe",
-  "language": "korean",
+  "language": "english",
   "duration": 8.5,
-  "text": "이 문서를 보면서 설명합니다",
+  "text": "Looking at this document I will explain",
   "segments": [
-    {"id": 0, "start": 0.0, "end": 4.0, "text": " 이 문서를 보면서"},
-    {"id": 1, "start": 4.0, "end": 8.5, "text": " 설명합니다"}
+    {"id": 0, "start": 0.0, "end": 4.0, "text": " Looking at this document"},
+    {"id": 1, "start": 4.0, "end": 8.5, "text": " I will explain"}
   ]
 }`
 
@@ -25,14 +25,14 @@ func TestResolveOpenAIKey(t *testing.T) {
 	home := t.TempDir()
 	setTestHome(t, home)
 
-	// 1) 환경변수 우선
+	// 1) environment variable takes precedence
 	t.Setenv(openaiKeyEnv, "env-key")
 	key, err := ResolveOpenAIKey()
 	if err != nil || key != "env-key" {
 		t.Errorf("env key = %q, err = %v; want env-key", key, err)
 	}
 
-	// 2) 환경변수 없음 + 설정 파일
+	// 2) no environment variable + config file
 	t.Setenv(openaiKeyEnv, "")
 	cfgDir := filepath.Join(home, ".config", configDirName)
 	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
@@ -46,20 +46,20 @@ func TestResolveOpenAIKey(t *testing.T) {
 		t.Errorf("file key = %q, err = %v; want file-key", key, err)
 	}
 
-	// 3) 둘 다 없으면 설정 경로를 안내하는 에러
+	// 3) neither: an error pointing to the config path
 	if err := os.Remove(filepath.Join(cfgDir, configFileName)); err != nil {
 		t.Fatal(err)
 	}
 	_, err = ResolveOpenAIKey()
 	if err == nil || !strings.Contains(err.Error(), configFileName) {
-		t.Errorf("키 부재 에러에 설정 파일 안내가 없음: %v", err)
+		t.Errorf("missing-key error does not mention the config file: %v", err)
 	}
-	if !errors.Is(err, ErrNoOpenAIKey) || !strings.HasPrefix(err.Error(), "OpenAI API 키가 없습니다. ") {
-		t.Errorf("키 부재 에러가 ErrNoOpenAIKey를 감싸지 않거나 문구가 바뀜: %v", err)
+	if !errors.Is(err, ErrNoOpenAIKey) || !strings.HasPrefix(err.Error(), ErrNoOpenAIKey.Error()+". ") {
+		t.Errorf("missing-key error does not wrap ErrNoOpenAIKey or its wording changed: %v", err)
 	}
 }
 
-// newMockOpenAI는 요청 형식을 검증하고 verbose_json을 반환하는 mock 서버를 만든다.
+// newMockOpenAI creates a mock server that validates the request format and returns verbose_json.
 func newMockOpenAI(t *testing.T, status int, response string) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -113,13 +113,13 @@ func TestRunWhisperAPI(t *testing.T) {
 
 	result, err := loadWhisperResult(resultPath)
 	if err != nil {
-		t.Fatalf("결과 파싱 실패: %v", err)
+		t.Fatalf("failed to parse result: %v", err)
 	}
-	if result.Language != "korean" || len(result.Segments) != 2 {
+	if result.Language != "english" || len(result.Segments) != 2 {
 		t.Errorf("result = %+v", result)
 	}
 	if result.Segments[1].Start != 4.0 {
-		t.Errorf("두 번째 세그먼트 start = %v, want 4.0", result.Segments[1].Start)
+		t.Errorf("second segment start = %v, want 4.0", result.Segments[1].Start)
 	}
 }
 
@@ -138,14 +138,14 @@ func TestRunWhisperAPIError(t *testing.T) {
 	}
 	_, err := runWhisperAPI(filepath.Join(dir, "audio.json"), audioPath, "whisper-1", "", "bad-key")
 	if err == nil || !strings.Contains(err.Error(), "HTTP 401") {
-		t.Errorf("401 에러 표기가 없음: %v", err)
+		t.Errorf("error does not mention 401: %v", err)
 	}
 	if _, statErr := os.Stat(filepath.Join(dir, "audio.json")); !os.IsNotExist(statErr) {
-		t.Error("실패한 응답이 결과 파일로 저장됨")
+		t.Error("failed response was saved as a result file")
 	}
 }
 
-// whisper-1 기본 모델로 API 전사 → 타임스탬프 병합 문서 생성까지의 전체 흐름.
+// Full flow with the default whisper-1 model: API transcription → timestamp-merged document.
 func TestTranscribeRecordingViaAPI(t *testing.T) {
 	srv := newMockOpenAI(t, http.StatusOK, mockVerboseJSON)
 	defer srv.Close()
@@ -157,7 +157,7 @@ func TestTranscribeRecordingViaAPI(t *testing.T) {
 		t.Fatal(err)
 	}
 	eventsJSON := `{"version":1,"mode":"folder","root":"/proj","durationMs":8500,"audio":"audio.webm","events":[` +
-		`{"t":1000,"type":"focus","file":"doc.md","line":3,"lineEnd":3,"text":"본문 한 줄"},` +
+		`{"t":1000,"type":"focus","file":"doc.md","line":3,"lineEnd":3,"text":"a line of body text"},` +
 		`{"t":5000,"type":"copy","file":"main.go","line":1,"lineEnd":1,"text":"package main","selection":"package main"}]}`
 	if err := os.WriteFile(filepath.Join(dir, eventsFileName), []byte(eventsJSON), 0o644); err != nil {
 		t.Fatal(err)
@@ -172,20 +172,20 @@ func TestTranscribeRecordingViaAPI(t *testing.T) {
 		t.Fatal(err)
 	}
 	doc := parseTranscript(t, data)
-	if doc.Model != "whisper-1 (OpenAI Audio API)" || doc.Language != "korean" {
-		t.Errorf("model/language 불일치: %s / %s\n%s", doc.Model, doc.Language, data)
+	if doc.Model != "whisper-1 (OpenAI Audio API)" || doc.Language != "english" {
+		t.Errorf("model/language mismatch: %s / %s\n%s", doc.Model, doc.Language, data)
 	}
-	// 시간순 병합: speech(0s) → click(1s) → speech(4s) → copy(5s)
+	// chronological merge: speech(0s) → click(1s) → speech(4s) → copy(5s)
 	wantSeq := []struct {
 		kind, action, text string
 	}{
-		{"speech", "", "이 문서를 보면서"},
-		{"action", "click", "본문 한 줄"},
-		{"speech", "", "설명합니다"},
+		{"speech", "", "Looking at this document"},
+		{"action", "click", "a line of body text"},
+		{"speech", "", "I will explain"},
 		{"action", "copy", "package main"},
 	}
 	if len(doc.Timeline) != len(wantSeq) {
-		t.Fatalf("timeline 길이 = %d, want %d\n%s", len(doc.Timeline), len(wantSeq), data)
+		t.Fatalf("timeline length = %d, want %d\n%s", len(doc.Timeline), len(wantSeq), data)
 	}
 	for i, w := range wantSeq {
 		got := doc.Timeline[i]

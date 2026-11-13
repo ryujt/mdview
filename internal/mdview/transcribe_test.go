@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// transcriptForTest는 transcript.json 검증용 최소 구조이다.
+// transcriptForTest is a minimal structure for verifying transcript.json.
 type transcriptForTest struct {
 	Version  int    `json:"version"`
 	Mode     string `json:"mode"`
@@ -38,19 +38,19 @@ func parseTranscript(t *testing.T, data []byte) transcriptForTest {
 	t.Helper()
 	var doc transcriptForTest
 	if err := json.Unmarshal(data, &doc); err != nil {
-		t.Fatalf("transcript.json 파싱 실패: %v\n%s", err, data)
+		t.Fatalf("failed to parse transcript.json: %v\n%s", err, data)
 	}
 	return doc
 }
 
 func TestFindRecordingAudio(t *testing.T) {
 	dir := t.TempDir()
-	// whisper 결과(audio.json)는 오디오로 취급하면 안 된다.
+	// The whisper result (audio.json) must not be treated as audio.
 	if err := os.WriteFile(filepath.Join(dir, "audio.json"), []byte("{}"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := findRecordingAudio(dir); err == nil {
-		t.Error("오디오가 없는데 에러가 발생하지 않음")
+		t.Error("no error even though there is no audio")
 	}
 	if err := os.WriteFile(filepath.Join(dir, "audio.m4a"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
@@ -74,10 +74,10 @@ func fixtureMeta() *RecordingMeta {
 		Audio:      "audio.webm",
 		Events: []RecordingEvent{
 			{T: 500, Type: "open", File: "doc.md"},
-			{T: 6000, Type: "focus", File: "doc.md", Line: 3, LineEnd: 3, Text: "본문 한 줄"},
-			{T: 8000, Type: "word", File: "doc.md", Line: 5, LineEnd: 5, Text: "오케스트레이터"},
+			{T: 6000, Type: "focus", File: "doc.md", Line: 3, LineEnd: 3, Text: "a line of body text"},
+			{T: 8000, Type: "word", File: "doc.md", Line: 5, LineEnd: 5, Text: "orchestrator"},
 			{T: 12000, Type: "copy", File: "main.go", Line: 1, LineEnd: 2, Text: "package main\n\nfunc main() {}", Selection: "package main"},
-			{T: 20000, Type: "focus", File: "doc.md", Line: 9, LineEnd: 12, Text: "블록 내용", Approx: true},
+			{T: 20000, Type: "focus", File: "doc.md", Line: 9, LineEnd: 12, Text: "block content", Approx: true},
 			{T: 26000, Type: "focus", File: "docs/sample.pdf", PDF: &PDFRef{Page: 2, X: floatPtr(0), Y: floatPtr(0.25)}},
 		},
 	}
@@ -89,11 +89,11 @@ func floatPtr(v float64) *float64 {
 
 func fixtureResult() *WhisperResult {
 	return &WhisperResult{
-		Language: "ko",
+		Language: "en",
 		Segments: []TranscriptSegment{
-			{Start: 5, End: 10, Text: " 이 문서의 본문을 보면"},
-			{Start: 10, End: 18, Text: " 메인 함수는 이렇게 생겼고"},
-			{Start: 18, End: 25, Text: " 마지막으로 이 블록이 중요합니다"},
+			{Start: 5, End: 10, Text: " Looking at the body of this document"},
+			{Start: 10, End: 18, Text: " the main function looks like this"},
+			{Start: 18, End: 25, Text: " and finally this block is important"},
 		},
 	}
 }
@@ -106,18 +106,18 @@ func TestBuildTranscriptJSON(t *testing.T) {
 	doc := parseTranscript(t, data)
 
 	if doc.Version != 1 || doc.Mode != "folder" || doc.Target != "/proj" {
-		t.Errorf("헤더 필드 불일치: %+v", doc)
+		t.Errorf("header field mismatch: %+v", doc)
 	}
-	if doc.Model != "openai/whisper-large-v3" || doc.Language != "ko" {
-		t.Errorf("model/language 불일치: %s / %s", doc.Model, doc.Language)
+	if doc.Model != "openai/whisper-large-v3" || doc.Language != "en" {
+		t.Errorf("model/language mismatch: %s / %s", doc.Model, doc.Language)
 	}
 	for _, key := range []string{"open", "click", "select", "copy"} {
 		if doc.Guide.Actions[key] == "" {
-			t.Errorf("guide.actions에 %q 설명이 없음", key)
+			t.Errorf("guide.actions has no description for %q", key)
 		}
 	}
 
-	// 발화 3개 + 이벤트 6개가 시간순으로 병합되고, 내부 타입이 행동 이름으로 바뀐다:
+	// 3 speech segments + 6 events are merged chronologically, and internal types become action names:
 	// open(0.5s) → speech(5s) → click(6s, focus) → select(8s, word) → speech(10s)
 	// → copy(12s) → speech(18s) → click(20s, focus) → click(26s, PDF focus)
 	wantSeq := []struct{ kind, action string }{
@@ -126,7 +126,7 @@ func TestBuildTranscriptJSON(t *testing.T) {
 		{"action", "click"},
 	}
 	if len(doc.Timeline) != len(wantSeq) {
-		t.Fatalf("timeline 길이 = %d, want %d\n%s", len(doc.Timeline), len(wantSeq), data)
+		t.Fatalf("timeline length = %d, want %d\n%s", len(doc.Timeline), len(wantSeq), data)
 	}
 	for i, w := range wantSeq {
 		got := doc.Timeline[i]
@@ -136,43 +136,43 @@ func TestBuildTranscriptJSON(t *testing.T) {
 	}
 
 	speech := doc.Timeline[1]
-	if speech.StartMs != 5000 || speech.EndMs != 10000 || speech.Text != "이 문서의 본문을 보면" {
-		t.Errorf("speech 항목 불일치: %+v", speech)
+	if speech.StartMs != 5000 || speech.EndMs != 10000 || speech.Text != "Looking at the body of this document" {
+		t.Errorf("speech entry mismatch: %+v", speech)
 	}
 	sel := doc.Timeline[3]
-	if sel.AtMs != 8000 || sel.File != "doc.md" || sel.Line != 5 || sel.Text != "오케스트레이터" {
-		t.Errorf("select 항목 불일치: %+v", sel)
+	if sel.AtMs != 8000 || sel.File != "doc.md" || sel.Line != 5 || sel.Text != "orchestrator" {
+		t.Errorf("select entry mismatch: %+v", sel)
 	}
 	cp := doc.Timeline[5]
 	if cp.Selection != "package main" || cp.Line != 1 || cp.LineEnd != 2 {
-		t.Errorf("copy 항목 불일치: %+v", cp)
+		t.Errorf("copy entry mismatch: %+v", cp)
 	}
 	if last := doc.Timeline[7]; !last.Approx || last.Line != 9 || last.LineEnd != 12 {
-		t.Errorf("approx click 항목 불일치: %+v", last)
+		t.Errorf("approx click entry mismatch: %+v", last)
 	}
 	pdfClick := doc.Timeline[8]
 	if pdfClick.File != "docs/sample.pdf" || pdfClick.PDF == nil ||
 		pdfClick.PDF.Page != 2 || pdfClick.PDF.X == nil || *pdfClick.PDF.X != 0 ||
 		pdfClick.PDF.Y == nil || *pdfClick.PDF.Y != 0.25 {
-		t.Errorf("PDF click 항목 불일치: %+v", pdfClick)
+		t.Errorf("PDF click entry mismatch: %+v", pdfClick)
 	}
 }
 
 func TestBuildTranscriptJSONNoSegments(t *testing.T) {
-	data, err := buildTranscriptJSON(fixtureMeta(), &WhisperResult{Language: "ko"}, "medium")
+	data, err := buildTranscriptJSON(fixtureMeta(), &WhisperResult{Language: "en"}, "medium")
 	if err != nil {
 		t.Fatalf("buildTranscriptJSON error: %v", err)
 	}
 	doc := parseTranscript(t, data)
 	if doc.Model != "medium" {
-		t.Errorf("비기본 모델 이름이 그대로 표기되지 않음: %s", doc.Model)
+		t.Errorf("non-default model name not shown verbatim: %s", doc.Model)
 	}
 	if len(doc.Timeline) != 6 {
-		t.Errorf("세그먼트가 없어도 이벤트 6개가 나열되어야 함 (got %d)", len(doc.Timeline))
+		t.Errorf("6 events should be listed even without segments (got %d)", len(doc.Timeline))
 	}
 	for _, e := range doc.Timeline {
 		if e.Kind != "action" {
-			t.Errorf("발화 없는 녹화의 timeline에 %q가 있음", e.Kind)
+			t.Errorf("timeline of a recording without speech contains %q", e.Kind)
 		}
 	}
 
@@ -181,20 +181,20 @@ func TestBuildTranscriptJSONNoSegments(t *testing.T) {
 		t.Fatalf("buildTranscriptJSON(empty) error: %v", err)
 	}
 	if doc := parseTranscript(t, empty); len(doc.Timeline) != 0 {
-		t.Errorf("빈 녹화의 timeline은 비어야 함 (got %d)", len(doc.Timeline))
+		t.Errorf("timeline of an empty recording should be empty (got %d)", len(doc.Timeline))
 	}
 	if !strings.Contains(string(empty), `"timeline": []`) {
-		t.Errorf("빈 timeline은 null이 아닌 []여야 함\n%s", empty)
+		t.Errorf("empty timeline should be [] rather than null\n%s", empty)
 	}
 }
 
-// 사전 생성된 whisper JSON이 있으면 whisper 실행 없이 transcript.json까지 만들어져야 한다.
+// With a pre-generated whisper JSON, transcript.json should be built without running whisper.
 func TestTranscribeRecordingReusesExistingResult(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "audio.webm"), []byte("FAKE"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	whisperJSON := `{"text":"안녕하세요","language":"ko","segments":[{"start":0.0,"end":2.0,"text":" 안녕하세요"}]}`
+	whisperJSON := `{"text":"Hello","language":"en","segments":[{"start":0.0,"end":2.0,"text":" Hello"}]}`
 	if err := os.WriteFile(filepath.Join(dir, "audio.json"), []byte(whisperJSON), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -219,20 +219,20 @@ func TestTranscribeRecordingReusesExistingResult(t *testing.T) {
 	if doc.Model != "openai/whisper-large-v3" {
 		t.Errorf("model = %q", doc.Model)
 	}
-	// 발화(0ms)가 open(100ms)보다 앞 — 시간순 병합
-	if len(doc.Timeline) != 2 || doc.Timeline[0].Kind != "speech" || doc.Timeline[0].Text != "안녕하세요" ||
+	// speech (0ms) precedes open (100ms) — chronological merge
+	if len(doc.Timeline) != 2 || doc.Timeline[0].Kind != "speech" || doc.Timeline[0].Text != "Hello" ||
 		doc.Timeline[1].Action != "open" {
-		t.Errorf("timeline 불일치\n%s", data)
+		t.Errorf("timeline mismatch\n%s", data)
 	}
 }
 
-// 이벤트 메타가 없어도 전사 문서는 생성되어야 한다.
+// The transcript should be generated even without event metadata.
 func TestTranscribeRecordingWithoutEvents(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "audio.webm"), []byte("FAKE"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	whisperJSON := `{"text":"테스트","language":"ko","segments":[{"start":0.0,"end":1.0,"text":" 테스트"}]}`
+	whisperJSON := `{"text":"test","language":"en","segments":[{"start":0.0,"end":1.0,"text":" test"}]}`
 	if err := os.WriteFile(filepath.Join(dir, "audio.json"), []byte(whisperJSON), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -242,22 +242,22 @@ func TestTranscribeRecordingWithoutEvents(t *testing.T) {
 	}
 	data, _ := os.ReadFile(outPath)
 	doc := parseTranscript(t, data)
-	if len(doc.Timeline) != 1 || doc.Timeline[0].Kind != "speech" || doc.Timeline[0].Text != "테스트" {
-		t.Errorf("이벤트 없는 전사 실패\n%s", data)
+	if len(doc.Timeline) != 1 || doc.Timeline[0].Kind != "speech" || doc.Timeline[0].Text != "test" {
+		t.Errorf("transcription without events failed\n%s", data)
 	}
 }
 
-// 이전 버전 녹화의 events.json에 남은 웹 페이지 조작(web-*) 이벤트와 알 수 없는 타입은
-// 오류 없이 타임라인에서 제외되고, 웹 전용 필드는 출력에 나타나지 않는다.
+// Web page interaction (web-*) events left in events.json of older recordings and unknown types
+// are excluded from the timeline without error, and web-only fields do not appear in the output.
 func TestBuildTranscriptJSONSkipsUnknownEvents(t *testing.T) {
 	raw := `{"version":1,"mode":"folder","root":"/proj","durationMs":30000,"droppedWebEvents":2,"events":[` +
 		`{"t":1000,"type":"web-open","url":"https://example.com/dash"},` +
 		`{"t":2000,"type":"web-click","url":"https://example.com/dash","selector":"main > span","tag":"span","text":"12,345"},` +
 		`{"t":2500,"type":"zoom","file":"a.md"},` +
-		`{"t":3000,"type":"focus","file":"a.md","line":3,"lineEnd":3,"text":"본문"}]}`
+		`{"t":3000,"type":"focus","file":"a.md","line":3,"lineEnd":3,"text":"body"}]}`
 	var meta RecordingMeta
 	if err := json.Unmarshal([]byte(raw), &meta); err != nil {
-		t.Fatalf("events.json 파싱 실패: %v", err)
+		t.Fatalf("failed to parse events.json: %v", err)
 	}
 	data, err := buildTranscriptJSON(&meta, &WhisperResult{}, DefaultTranscribeModel)
 	if err != nil {
@@ -267,14 +267,14 @@ func TestBuildTranscriptJSONSkipsUnknownEvents(t *testing.T) {
 		Timeline []map[string]any `json:"timeline"`
 	}
 	if err := json.Unmarshal(data, &doc); err != nil {
-		t.Fatalf("파싱 실패: %v\n%s", err, data)
+		t.Fatalf("parse failed: %v\n%s", err, data)
 	}
 	if len(doc.Timeline) != 1 || doc.Timeline[0]["action"] != "click" || doc.Timeline[0]["file"] != "a.md" {
-		t.Fatalf("timeline = %v, want 문서 클릭 1개", doc.Timeline)
+		t.Fatalf("timeline = %v, want 1 document click", doc.Timeline)
 	}
 	for _, key := range []string{"url", "selector", "tag", "droppedWebEvents"} {
 		if strings.Contains(string(data), `"`+key+`"`) {
-			t.Errorf("transcript.json에 웹 필드 %q가 남음:\n%s", key, data)
+			t.Errorf("web field %q remains in transcript.json:\n%s", key, data)
 		}
 	}
 }

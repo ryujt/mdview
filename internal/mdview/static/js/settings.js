@@ -27,32 +27,32 @@ export function initSettings() {
   function resetKey() {
     key.value = '';
     key.type = 'password';
-    visibility.textContent = '표시';
+    visibility.textContent = 'Show';
     visibility.setAttribute('aria-pressed', 'false');
-    visibility.setAttribute('aria-label', '입력한 API 키 표시');
+    visibility.setAttribute('aria-label', 'Show entered API key');
     clearKey = false;
   }
 
   function modelDescription() {
     const option = settings?.models.find(option => option.id === model.value);
     modelHelp.textContent = option?.timestamps
-      ? '현재 기본 모델입니다. 발화별 시간 정보를 문서 조작 기록과 함께 저장합니다.'
-      : '발화별 시간 정보 없이 전체 전사문을 저장합니다. 문서 조작 시간은 그대로 기록됩니다.';
+      ? 'The current default model. Saves per-utterance timing along with the document interaction log.'
+      : 'Saves the full transcript without per-utterance timing. Document interaction times are still recorded.';
   }
 
   function applySettings(data) {
     settings = data;
     resetKey();
-    keyBadge.textContent = data.has_api_key ? '설정됨' : '미설정';
+    keyBadge.textContent = data.has_api_key ? 'Set' : 'Not set';
     keyBadge.classList.toggle('configured', data.has_api_key);
-    key.placeholder = data.has_saved_api_key ? '새 키를 입력하면 기존 키를 변경합니다' : 'sk-…';
+    key.placeholder = data.has_saved_api_key ? 'Enter a new key to replace the existing one' : 'sk-…';
     keyHelp.textContent = data.key_source === 'environment'
-      ? 'OPENAI_API_KEY 환경 변수의 키가 우선 적용됩니다. 여기에서 저장한 키는 환경 변수가 없을 때 사용합니다.'
+      ? 'The key in the OPENAI_API_KEY environment variable takes precedence. The key saved here is used when the variable is not set.'
       : data.has_saved_api_key
-        ? '저장된 키는 표시하지 않습니다. 비워 두면 기존 키를 유지합니다.'
-        : '키 없이도 문서 열람과 녹음은 사용할 수 있습니다.';
+        ? 'Saved keys are not displayed. Leave blank to keep the existing key.'
+        : 'You can view documents and record without a key.';
     clear.disabled = !data.has_saved_api_key;
-    clear.textContent = '저장된 키 삭제';
+    clear.textContent = 'Delete saved key';
     model.replaceChildren(...data.models.map(option => {
       const element = document.createElement('option');
       element.value = option.id;
@@ -66,7 +66,7 @@ export function initSettings() {
   async function responseJSON(response) {
     if (!response.ok) {
       // Responses never include credentials. Do not log request bodies or key input.
-      throw new Error((await response.text()).trim() || '설정 요청에 실패했습니다.');
+      throw new Error((await response.text()).trim() || 'Settings request failed.');
     }
     return response.json();
   }
@@ -77,7 +77,7 @@ export function initSettings() {
     resetKey();
     fields.disabled = true;
     save.disabled = true;
-    showMessage('설정을 불러오는 중…');
+    showMessage('Loading settings…');
     dialog.showModal();
     try {
       const data = await responseJSON(await fetch(SETTINGS_API, { cache: 'no-store' }));
@@ -88,7 +88,7 @@ export function initSettings() {
       showMessage('');
       (data.has_api_key ? model : key).focus();
     } catch {
-      if (current === generation && dialog.open) showMessage('설정을 불러오지 못했습니다. 창을 닫고 다시 열어 주세요.', true);
+      if (current === generation && dialog.open) showMessage('Failed to load settings. Close this window and open it again.', true);
     }
   });
 
@@ -96,22 +96,22 @@ export function initSettings() {
   visibility.addEventListener('click', () => {
     const visible = key.type === 'password';
     key.type = visible ? 'text' : 'password';
-    visibility.textContent = visible ? '숨기기' : '표시';
+    visibility.textContent = visible ? 'Hide' : 'Show';
     visibility.setAttribute('aria-pressed', String(visible));
-    visibility.setAttribute('aria-label', visible ? '입력한 API 키 숨기기' : '입력한 API 키 표시');
+    visibility.setAttribute('aria-label', visible ? 'Hide entered API key' : 'Show entered API key');
   });
   clear.addEventListener('click', () => {
     key.value = '';
     clearKey = true;
     clear.disabled = true;
-    clear.textContent = '삭제 예정';
-    showMessage('저장을 누르면 이 컴퓨터에 저장된 키가 삭제됩니다.');
+    clear.textContent = 'Pending deletion';
+    showMessage('Click Save to delete the key stored on this computer.');
   });
   key.addEventListener('input', () => {
     if (key.value) {
       clearKey = false;
       clear.disabled = !settings?.has_saved_api_key;
-      clear.textContent = '저장된 키 삭제';
+      clear.textContent = 'Delete saved key';
     }
     showMessage('');
   });
@@ -126,7 +126,7 @@ export function initSettings() {
     button.disabled = true;
     fields.disabled = true;
     save.disabled = true;
-    save.textContent = '저장 중…';
+    save.textContent = 'Saving…';
     showMessage('');
     try {
       const data = await responseJSON(await fetch(SETTINGS_API, {
@@ -134,7 +134,7 @@ export function initSettings() {
       }));
       if (current === generation && dialog.open) {
         applySettings(data);
-        showMessage('저장했습니다. 다음 녹음의 음성 전사부터 적용됩니다.');
+        showMessage('Saved. Takes effect starting with the next recording\'s transcription.');
       }
     } catch (error) {
       if (current === generation && dialog.open) showMessage(error.message, true);
@@ -144,7 +144,7 @@ export function initSettings() {
       if (current === generation && dialog.open) {
         fields.disabled = false;
         save.disabled = false;
-        save.textContent = '저장';
+        save.textContent = 'Save';
       }
     }
   });
@@ -153,7 +153,7 @@ export function initSettings() {
   dialog.addEventListener('close', () => {
     generation += 1;
     resetKey();
-    save.textContent = '저장';
+    save.textContent = 'Save';
     button.focus();
   });
 }

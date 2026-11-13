@@ -11,19 +11,19 @@ import (
 	"github.com/ryu/tools-camp/cli/mdview/internal/mdview/logging"
 )
 
-// audioSniffLen은 컨테이너 판별에 읽는 선두 바이트 수이다.
-// WAV("RIFF....WAVE")가 12바이트를 요구하므로 여유 있게 잡는다.
+// audioSniffLen is the number of leading bytes read to detect the container.
+// WAV ("RIFF....WAVE") needs 12 bytes, so this leaves some headroom.
 const audioSniffLen = 16
 
-// audioFormat은 선두 바이트로 판별한 오디오 컨테이너이다.
+// audioFormat is an audio container detected from the leading bytes.
 type audioFormat struct {
-	Name string // 사람이 읽는 이름 (WebM, OGG …)
-	Ext  string // 전사 API 업로드 시 사용할 확장자
+	Name string // human-readable name (WebM, OGG …)
+	Ext  string // extension to use when uploading to the transcription API
 }
 
-// sniffAudioFormat은 파일 선두 바이트로 오디오 컨테이너를 판별한다.
-// 전사 API(OpenAI)는 확장자와 무관하게 내용을 검사하므로, 헤더가 없는 데이터는
-// "Invalid file format"으로 거부된다. 그 사실을 업로드 전에 미리 알아내는 용도다.
+// sniffAudioFormat detects the audio container from a file's leading bytes.
+// The transcription API (OpenAI) inspects the content regardless of extension, so data without
+// a header is rejected with "Invalid file format". This detects that before uploading.
 func sniffAudioFormat(head []byte) (audioFormat, bool) {
 	switch {
 	case bytes.HasPrefix(head, []byte{0x1A, 0x45, 0xDF, 0xA3}): // EBML (WebM/Matroska)
@@ -37,13 +37,13 @@ func sniffAudioFormat(head []byte) (audioFormat, bool) {
 	case bytes.HasPrefix(head, []byte("fLaC")):
 		return audioFormat{"FLAC", ".flac"}, true
 	case bytes.HasPrefix(head, []byte("ID3")),
-		len(head) >= 2 && head[0] == 0xFF && head[1]&0xE0 == 0xE0: // MPEG 오디오 프레임 sync
+		len(head) >= 2 && head[0] == 0xFF && head[1]&0xE0 == 0xE0: // MPEG audio frame sync
 		return audioFormat{"MP3", ".mp3"}, true
 	}
 	return audioFormat{}, false
 }
 
-// readAudioHead는 파일 선두 바이트와 전체 크기를 읽는다.
+// readAudioHead reads a file's leading bytes and total size.
 func readAudioHead(path string) (head []byte, size int64, err error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -62,30 +62,30 @@ func readAudioHead(path string) (head []byte, size int64, err error) {
 	return buf[:n], fi.Size(), nil
 }
 
-// validateRecordingAudio는 녹화 오디오가 전사 가능한 컨테이너인지 검사하고,
-// 아니면 원인과 크기·선두 바이트를 담은 한국어 오류를 반환한다.
-// 전사 API의 불친절한 "Invalid file format" 대신 이 메시지가 사용자에게 보인다.
+// validateRecordingAudio checks whether the recorded audio is in a transcribable container,
+// and if not, returns an error describing the cause along with the size and leading bytes.
+// Users see this message instead of the transcription API's unhelpful "Invalid file format".
 func validateRecordingAudio(path string) error {
 	head, size, err := readAudioHead(path)
 	if err != nil {
-		return fmt.Errorf("오디오 파일을 읽을 수 없습니다 (%s): %w", filepath.Base(path), err)
+		return fmt.Errorf("cannot read audio file (%s): %w", filepath.Base(path), err)
 	}
 	name := filepath.Base(path)
 	if size == 0 {
-		return fmt.Errorf("오디오 파일이 비어 있습니다 (%s, 0 bytes). "+
-			"마이크 입력이 전혀 없었을 가능성이 큽니다 — 입력 장치와 브라우저 마이크 권한을 확인하세요", name)
+		return fmt.Errorf("audio file is empty (%s, 0 bytes). "+
+			"There was most likely no microphone input at all — check the input device and the browser's microphone permission", name)
 	}
 	if _, ok := sniffAudioFormat(head); !ok {
-		return fmt.Errorf("오디오 파일 형식을 인식할 수 없습니다 (%s, %d bytes, 선두 바이트: %s). "+
-			"WebM/OGG/MP4/MP3/WAV 헤더가 없어 전사 API가 거부합니다 — 입력 장치를 바꿔 다시 녹음해 보세요",
+		return fmt.Errorf("unrecognized audio file format (%s, %d bytes, leading bytes: %s). "+
+			"The transcription API will reject it because it has no WebM/OGG/MP4/MP3/WAV header — try recording again with a different input device",
 			name, size, hexDump(head))
 	}
 	return nil
 }
 
-// transcribeUploadName은 전사 API에 보낼 파일 이름을 정한다.
-// 저장 확장자는 브라우저가 보낸 MIME으로 정해지므로 실제 내용과 다를 수 있다.
-// 내용으로 판별한 확장자가 있으면 그것을 우선한다.
+// transcribeUploadName decides the file name sent to the transcription API.
+// The saved extension comes from the MIME type the browser sent, so it may not match the actual content.
+// An extension detected from the content takes precedence.
 func transcribeUploadName(path string) string {
 	name := filepath.Base(path)
 	head, _, err := readAudioHead(path)
@@ -107,12 +107,12 @@ func hexDump(b []byte) string {
 	return strings.Join(parts, " ")
 }
 
-// warnIfAudioUnusable은 업로드 직후 오디오 컨테이너를 검사해 문제가 있으면 경고만 남긴다.
-// 저장 자체는 성공이므로 요청을 실패시키지 않는다. 자동 전사가 꺼져 있어도
-// 터미널에서 즉시 원인을 볼 수 있게 하는 것이 목적이다.
+// warnIfAudioUnusable checks the audio container right after upload and only logs a warning on problems.
+// The save itself succeeded, so the request is not failed. The goal is to surface the cause
+// in the terminal immediately, even when automatic transcription is off.
 func warnIfAudioUnusable(path string) {
 	if err := validateRecordingAudio(path); err != nil {
-		logging.Warn("[Recording] 오디오 검증 경고: %v", err)
-		fmt.Fprintf(os.Stderr, "경고: 저장된 오디오를 전사할 수 없을 수 있습니다 — %v\n", err)
+		logging.Warn("[Recording] audio validation warning: %v", err)
+		fmt.Fprintf(os.Stderr, "warning: the saved audio may not be transcribable — %v\n", err)
 	}
 }

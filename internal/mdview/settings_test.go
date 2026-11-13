@@ -205,7 +205,7 @@ func TestPipelineUsesSelectedAPIModelAndPreservesUntimedSpeech(t *testing.T) {
 			t.Error("wrong selected model request format")
 		}
 		w.Header().Set("Content-Type", "application/json")
-		io.WriteString(w, `{"text":"새 모델로 변환한 전체 발화입니다"}`)
+		io.WriteString(w, `{"text":"Full speech transcribed by the new model"}`)
 	}))
 	defer srv.Close()
 	withMockAPIBase(t, srv.URL)
@@ -221,7 +221,7 @@ func TestPipelineUsesSelectedAPIModelAndPreservesUntimedSpeech(t *testing.T) {
 	if err := json.Unmarshal([]byte(readFixture(t, dir, transcriptFileName)), &doc); err != nil {
 		t.Fatal(err)
 	}
-	if doc["untimedSpeech"] != "새 모델로 변환한 전체 발화입니다" {
+	if doc["untimedSpeech"] != "Full speech transcribed by the new model" {
 		t.Fatal("untimed transcript was lost")
 	}
 	for _, item := range doc["timeline"].([]any) {
@@ -230,7 +230,7 @@ func TestPipelineUsesSelectedAPIModelAndPreservesUntimedSpeech(t *testing.T) {
 		}
 	}
 	prompt := readFixture(t, dir, promptFileName)
-	if !strings.Contains(prompt, "새 모델로 변환한 전체 발화입니다") || !strings.Contains(prompt, "시간 정보 없음") {
+	if !strings.Contains(prompt, "Full speech transcribed by the new model") || !strings.Contains(prompt, "No Timing") {
 		t.Fatal("prompt lost the untimed speech")
 	}
 }

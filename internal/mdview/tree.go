@@ -9,11 +9,11 @@ import (
 	"strings"
 )
 
-// errTreePath는 클라이언트가 요청한 트리 경로가 유효하지 않음을 나타낸다.
-// 핸들러가 서버 내부 오류(500)와 잘못된 요청(400)을 구분하는 데 쓴다.
+// errTreePath indicates that the tree path requested by the client is invalid.
+// Handlers use it to tell internal server errors (500) from bad requests (400).
 var errTreePath = errors.New("invalid tree path")
 
-// 사용자 홈/프로젝트 폴더에 흔한 무거운 디렉토리는 트리에서 제외한다.
+// Heavy directories common in home/project folders are excluded from the tree.
 var excludedDirs = map[string]bool{
 	".git":         true,
 	"node_modules": true,
@@ -29,9 +29,9 @@ var excludedDirs = map[string]bool{
 	".vscode":      true,
 }
 
-// BuildTreeLevel은 rel 디렉토리 바로 아래 1레벨(하위 디렉토리 + 뷰어 대상 파일)만 구성한다.
-// 하위 디렉토리의 내용은 조회하지 않는다 — 사이드바가 폴더를 펼칠 때마다 다시 요청한다.
-// Path 필드는 root 기준 상대 경로이며 슬래시로 구분된다(OS 독립적 표현).
+// BuildTreeLevel builds only the single level directly under rel (subdirectories + viewable files).
+// Subdirectory contents are not read — the sidebar requests them each time a folder is expanded.
+// The Path field is relative to root and slash-separated (OS-independent).
 func BuildTreeLevel(root, rel string) (*TreeNode, error) {
 	absDir, err := ResolveRelDir(root, rel)
 	if err != nil {
@@ -44,7 +44,7 @@ func BuildTreeLevel(root, rel string) (*TreeNode, error) {
 
 	children := make([]*TreeNode, 0, len(entries))
 	for _, entry := range entries {
-		// 심볼릭 링크/특수 파일은 건너뛴다.
+		// Skip symlinks and special files.
 		entryInfo, err := entry.Info()
 		if err != nil {
 			continue
@@ -73,7 +73,7 @@ func BuildTreeLevel(root, rel string) (*TreeNode, error) {
 	}, nil
 }
 
-// joinRel은 슬래시 구분 상대 경로에 하위 이름을 잇는다.
+// joinRel appends a child name to a slash-separated relative path.
 func joinRel(rel, name string) string {
 	if rel == "" {
 		return name
@@ -81,7 +81,7 @@ func joinRel(rel, name string) string {
 	return rel + "/" + name
 }
 
-// sortNodes는 디렉토리를 먼저, 파일을 뒤로 정렬한다. 같은 종류끼리는 이름순이다.
+// sortNodes sorts directories first, then files, each by name.
 func sortNodes(nodes []*TreeNode) {
 	sort.SliceStable(nodes, func(i, j int) bool {
 		a, b := nodes[i], nodes[j]
@@ -92,7 +92,7 @@ func sortNodes(nodes []*TreeNode) {
 	})
 }
 
-// relPath는 root 기준 path의 상대 경로를 슬래시 구분자로 반환한다.
+// relPath returns path relative to root with slash separators.
 func relPath(root, path string) string {
 	rel, err := filepath.Rel(root, path)
 	if err != nil {
@@ -104,8 +104,8 @@ func relPath(root, path string) string {
 	return filepath.ToSlash(rel)
 }
 
-// ResolveRelPath는 클라이언트가 요청한 상대 경로를 검증하고 절대 경로로 변환한다.
-// 루트 바깥을 가리키는 경로나 뷰어 대상이 아닌 파일은 거부한다.
+// ResolveRelPath validates a client-requested relative path and converts it to an absolute path.
+// Paths outside the root and non-viewable files are rejected.
 func ResolveRelPath(root, rel string) (string, error) {
 	if rel == "" {
 		return "", errors.New("empty path")
@@ -117,9 +117,9 @@ func ResolveRelPath(root, rel string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// 슬래시를 OS 구분자로 변환 후 clean
+	// Convert slashes to OS separators, then clean
 	candidate := filepath.Clean(filepath.Join(absRoot, filepath.FromSlash(rel)))
-	// candidate가 root 하위인지 확인 (경계 사례 포함)
+	// Check that candidate is under root (including edge cases)
 	rootWithSep := absRoot + string(filepath.Separator)
 	if candidate != absRoot && !strings.HasPrefix(candidate, rootWithSep) {
 		return "", errors.New("path escapes root")
@@ -134,8 +134,8 @@ func ResolveRelPath(root, rel string) (string, error) {
 	return candidate, nil
 }
 
-// ResolveRelDir는 클라이언트가 요청한 상대 디렉토리 경로를 검증하고 절대 경로로 변환한다.
-// 빈 문자열은 루트를 뜻한다. 루트 밖 경로, 배제 디렉토리를 지나는 경로, 일반 파일은 거부한다.
+// ResolveRelDir validates a client-requested relative directory path and converts it to an absolute path.
+// An empty string means the root. Paths outside the root, paths through excluded directories, and regular files are rejected.
 func ResolveRelDir(root, rel string) (string, error) {
 	absRoot, err := filepath.Abs(root)
 	if err != nil {
@@ -162,7 +162,7 @@ func ResolveRelDir(root, rel string) (string, error) {
 	return candidate, nil
 }
 
-// containsExcludedDir는 root 기준 상대 경로의 구성요소 중 배제 디렉토리가 있는지 확인한다.
+// containsExcludedDir reports whether any component of a root-relative path is an excluded directory.
 func containsExcludedDir(absRoot, candidate string) bool {
 	rel := relPath(absRoot, candidate)
 	if rel == "" {
@@ -176,7 +176,7 @@ func containsExcludedDir(absRoot, candidate string) bool {
 	return false
 }
 
-// IsExcludedDir는 해당 이름이 트리 스캔에서 배제되는 디렉토리인지 반환한다.
+// IsExcludedDir reports whether the name is a directory excluded from tree scans.
 func IsExcludedDir(name string) bool {
 	return excludedDirs[name]
 }

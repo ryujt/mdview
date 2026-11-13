@@ -249,7 +249,7 @@ body:not(.has-sidebar) #preview { padding-bottom: 64px; }
   white-space: nowrap;
 }
 
-/* 툴바 (녹화 컨트롤) */
+/* Toolbar (recording controls) */
 #toolbar-actions {
   display: flex;
   align-items: center;
@@ -279,7 +279,7 @@ body:not(.has-sidebar) #preview { padding-bottom: 64px; }
   color: #586069;
 }
 
-/* 마이크 입력 레벨 미터 */
+/* Microphone input level meter */
 #record-level {
   width: 42px;
   height: 6px;
@@ -302,7 +302,7 @@ body:not(.has-sidebar) #preview { padding-bottom: 64px; }
   50% { opacity: 0.25; }
 }
 
-/* 녹음 입력 장치 선택 */
+/* Recording input device selector */
 #record-device {
   max-width: 180px;
   height: 28px;
@@ -322,7 +322,7 @@ body:not(.has-sidebar) #preview { padding-bottom: 64px; }
   cursor: default;
 }
 
-/* 백그라운드 작업(업로드/전사) 상태 칩 */
+/* Background job (upload/transcription) status chip */
 #job-status {
   display: inline-flex;
   align-items: center;
@@ -374,7 +374,7 @@ body:not(.has-sidebar) #preview { padding-bottom: 64px; }
   border-color: #d73a49;
 }
 
-/* 이전 녹화 업로드 중에는 새 녹음을 시작할 수 없다 */
+/* A new recording cannot start while the previous one is uploading */
 #record-button:disabled {
   opacity: 0.55;
   cursor: default;
@@ -393,12 +393,12 @@ body:not(.has-sidebar) #preview { padding-bottom: 64px; }
   background: #ffeef0;
 }
 
-/* 녹화 중에는 정지(사각형) 아이콘으로 변형 */
+/* Switch to a stop (square) icon while recording */
 #record-button.recording .rec-icon {
   border-radius: 2px;
 }
 
-/* 녹화 중 클릭 포커스 표시: 마크다운 블록 */
+/* Click focus indicator while recording: Markdown block */
 #preview .focus-block {
   background: rgba(255, 212, 0, 0.14);
   outline: 2px solid #f9c513;
@@ -406,7 +406,7 @@ body:not(.has-sidebar) #preview { padding-bottom: 64px; }
   border-radius: 2px;
 }
 
-/* 녹화 중 클릭 포커스 표시: 코드뷰어 라인 오버레이 */
+/* Click focus indicator while recording: code viewer line overlay */
 #preview .code-focus-line {
   position: absolute;
   left: 0;
@@ -414,7 +414,7 @@ body:not(.has-sidebar) #preview { padding-bottom: 64px; }
   pointer-events: none;
 }
 
-/* 녹화 저장 결과 토스트 */
+/* Recording save result toast */
 #record-toast {
   position: fixed;
   right: 16px;
@@ -438,7 +438,7 @@ body:not(.has-sidebar) #preview { padding-bottom: 64px; }
 }
 
 #record-toast span {
-  white-space: pre-line; /* 저장 경로/전사 안내 줄바꿈 표시 */
+  white-space: pre-line; /* Show line breaks in save path/transcription notices */
 }
 
 #record-toast.error {
@@ -798,9 +798,9 @@ body.html-preview #preview {
 #preview .smart-figure img { max-width: 100%; height: auto; }
 #preview .smart-caption { font-size: 0.85rem; font-weight: 600; color: #475569; margin: 14px 0 4px; padding-left: 8px; border-left: 3px solid #94a3b8; }
 
-/* 코드뷰어 (소스코드/설정 파일) */
+/* Code viewer (source code/config files) */
 #preview .code-viewer {
-  position: relative; /* 녹화 포커스 라인 오버레이의 기준 */
+  position: relative; /* Anchor for the recording focus line overlay */
   display: flex;
   align-items: flex-start;
   border: 1px solid #d1d9e0;
@@ -849,7 +849,7 @@ body.html-preview #preview {
   white-space: pre;
 }
 
-/* PDF 뷰어: 페이지별 캔버스 + 텍스트 선택용 투명 텍스트 레이어 */
+/* PDF viewer: per-page canvas + transparent text layer for selection */
 #preview .pdf-viewer {
   display: flex;
   flex-direction: column;
@@ -869,7 +869,7 @@ body.html-preview #preview {
   display: block;
 }
 
-/* 아직 렌더되지 않은 페이지 자리표시자 (뷰포트 근접 시 렌더됨) */
+/* Placeholder for pages not yet rendered (rendered as they near the viewport) */
 #preview .pdf-page.pdf-page-pending {
   background: #f6f8fa;
 }
@@ -897,7 +897,7 @@ body.html-preview #preview {
   background: rgba(3, 102, 214, 0.3);
 }
 
-/* 녹화 중 클릭 포커스 표시: PDF 페이지 내 클릭 지점 */
+/* Click focus indicator while recording: click point within a PDF page */
 #preview .pdf-focus-point {
   position: absolute;
   width: 14px;
@@ -943,7 +943,7 @@ body.html-preview #preview {
 @media (hover: none) { .preview-media-expand, .preview-media-copy { opacity: 1; } }
 @media print { .preview-media-expand, .preview-media-copy, .preview-media-dialog { display: none; } }
 
-/* 내보내기 메뉴 (PDF·마크다운 ZIP 저장) */
+/* Export menu (save as PDF / Markdown ZIP) */
 #export-menu-wrap { position: relative; }
 #export-menu-button {
   height: 28px;
@@ -989,10 +989,10 @@ body.html-preview #preview {
 #export-menu [role="menuitem"]:hover:not([aria-disabled="true"]) { background: #0366d6; color: #ffffff; }
 #export-menu [role="menuitem"][aria-disabled="true"] { color: #8c959f; cursor: default; }
 
-/* 인쇄 동안만 만드는 코드뷰어 대체 표 (화면에서는 숨김) */
+/* Code viewer replacement table built only while printing (hidden on screen) */
 #preview .code-print { display: none; }
 
-/* HTML PDF 저장용 인쇄 프레임: 화면에는 보이지 않게 둔다 */
+/* Print frame for saving HTML as PDF: kept invisible on screen */
 #pdf-export-frame {
   position: fixed;
   left: -10000px;
@@ -1004,7 +1004,7 @@ body.html-preview #preview {
   pointer-events: none;
 }
 
-/* PDF 저장(인쇄): 뷰어 UI를 숨기고 문서 본문만 페이지 폭에 맞춘다 */
+/* Save as PDF (print): hide the viewer UI and fit only the document body to the page width */
 @media print {
   #sidebar, #sidebar-resizer, #header-bar, #empty-state, #settings-button, #settings-dialog,
   #record-toast, #pdf-export-frame, .copy-button, #preview .code-focus-line, #preview .pdf-focus-point {
@@ -1015,9 +1015,9 @@ body.html-preview #preview {
   main { padding: 0; }
   body:not(.has-sidebar) #preview { padding-bottom: 0; }
   #preview .focus-block { background: none; outline: none; }
-  /* 화면에서는 가로 스크롤되는 코드·표를 페이지 안에서 줄바꿈한다 */
+  /* Wrap code and tables that scroll horizontally on screen so they fit the page */
   #preview pre, #preview .code-viewer { overflow: visible; }
-  /* break-all: 들여쓰기 뒤 긴 토큰이 다음 행으로 통째로 밀려 들여쓰기만 남는 것을 막는다 */
+  /* break-all: keeps a long token after indentation from moving wholesale to the next line, leaving only the indentation behind */
   #preview pre code { white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-all; }
   #preview .code-viewer { display: none !important; }
   #preview .code-print {
@@ -1040,12 +1040,12 @@ body.html-preview #preview {
     white-space: nowrap;
   }
   #preview .code-print-line { padding: 0 12px !important; background: transparent; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-all; }
-  /* 넓은 표는 셀 안에서 줄바꿈해 페이지 폭 안에 담는다 */
+  /* Wrap wide tables within cells to fit the page width */
   #preview table { display: table; overflow: visible; max-width: 100%; }
   #preview th, #preview td { overflow-wrap: anywhere; }
   #preview h1, #preview h2, #preview h3, #preview h4, #preview h5, #preview h6 { break-after: avoid; }
   #preview pre, #preview blockquote, #preview tr, #preview img, #preview svg, #preview .mermaid, #preview figure { break-inside: avoid; }
-  /* !important를 쓰지 않아 mermaid가 SVG에 넣은 인라인 max-width(원래 크기)를 유지한다. 작은 다이어그램이 페이지 폭으로 커지지 않는다 */
+  /* No !important, so the inline max-width (natural size) mermaid sets on the SVG is kept. Small diagrams do not grow to the page width */
   #preview img, #preview svg { max-width: 100%; }
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }

@@ -77,7 +77,7 @@ func TestSaveRecording(t *testing.T) {
 		t.Error("meta savedAt not injected")
 	}
 	if saved["mode"] != "folder" {
-		t.Errorf("meta mode = %v, want folder (원본 필드 보존)", saved["mode"])
+		t.Errorf("meta mode = %v, want folder (original fields preserved)", saved["mode"])
 	}
 }
 
@@ -94,7 +94,7 @@ func TestSaveRecordingUniqueDir(t *testing.T) {
 		t.Fatalf("second SaveRecording error: %v", err)
 	}
 	if dir1 == dir2 {
-		t.Errorf("동일 타임스탬프 저장이 같은 디렉토리를 반환: %q", dir1)
+		t.Errorf("saves with the same timestamp returned the same directory: %q", dir1)
 	}
 	if filepath.Base(dir2) != filepath.Base(dir1)+"-2" {
 		t.Errorf("dir2 = %q, want %q suffix -2", dir2, dir1)
@@ -105,18 +105,18 @@ func TestSaveRecordingRemovesPartialDirectoryOnFailure(t *testing.T) {
 	base := t.TempDir()
 	_, _, err := SaveRecording(base, strings.NewReader("audio"), "audio/webm", map[string]any{"invalid": make(chan int)}, time.Now())
 	if err == nil {
-		t.Fatal("잘못된 메타데이터 저장이 성공함")
+		t.Fatal("saving invalid metadata succeeded")
 	}
 	entries, err := os.ReadDir(filepath.Join(base, recordingsDirName))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(entries) != 0 {
-		t.Fatalf("실패한 녹화의 불완전한 디렉토리가 남아 있음: %v", entries)
+		t.Fatalf("incomplete directory left behind by failed recording: %v", entries)
 	}
 }
 
-// buildRecordingForm은 audio 파트(Content-Type 지정)와 meta 필드를 가진 multipart 본문을 만든다.
+// buildRecordingForm builds a multipart body with an audio part (with Content-Type) and a meta field.
 func buildRecordingForm(t *testing.T, audioContent, audioMime, meta string) (*bytes.Buffer, string) {
 	t.Helper()
 	var buf bytes.Buffer
@@ -184,7 +184,7 @@ func TestHandleRecordingFolderMode(t *testing.T) {
 		t.Errorf("dir = %q, want under %s", result.Dir, filepath.Join(base, recordingsDirName))
 	}
 	if _, err := os.Stat(filepath.Join(root, recordingsDirName)); !os.IsNotExist(err) {
-		t.Error("프로젝트 폴더에 녹화 저장소가 생성됨")
+		t.Error("recording store was created in the project folder")
 	}
 
 	audioData, err := os.ReadFile(filepath.Join(result.Dir, result.Audio))
@@ -208,7 +208,7 @@ func TestHandleRecordingFolderMode(t *testing.T) {
 	}
 	events, ok := saved["events"].([]any)
 	if !ok || len(events) != 1 {
-		t.Errorf("saved events = %v, want 1개", saved["events"])
+		t.Errorf("saved events = %v, want 1", saved["events"])
 	}
 }
 
@@ -255,7 +255,7 @@ func TestHandleRecordingFileMode(t *testing.T) {
 		t.Errorf("dir = %q, want under %s", result.Dir, filepath.Join(base, recordingsDirName))
 	}
 	if _, err := os.Stat(filepath.Join(dir, recordingsDirName)); !os.IsNotExist(err) {
-		t.Error("대상 파일의 폴더에 녹화가 저장됨")
+		t.Error("recording was saved in the target file's folder")
 	}
 	if result.Audio != "audio.m4a" {
 		t.Errorf("audio = %q, want audio.m4a", result.Audio)
@@ -294,7 +294,7 @@ func TestHandleRecordingRejections(t *testing.T) {
 		ts.Close()
 	}()
 
-	// GET 요청 거부
+	// Reject GET requests
 	res, err := http.Get(ts.URL + apiRecordingPath)
 	if err != nil {
 		t.Fatalf("GET error: %v", err)
@@ -304,7 +304,7 @@ func TestHandleRecordingRejections(t *testing.T) {
 		t.Errorf("GET status = %d, want 405", res.StatusCode)
 	}
 
-	// 크로스오리진 업로드 거부
+	// Reject cross-origin uploads
 	body, contentType := buildRecordingForm(t, "X", "audio/webm", `{}`)
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+apiRecordingPath, body)
 	req.Header.Set("Content-Type", contentType)
@@ -318,7 +318,7 @@ func TestHandleRecordingRejections(t *testing.T) {
 		t.Errorf("cross-origin status = %d, want 403", res.StatusCode)
 	}
 
-	// 같은 호스트의 다른 포트(로컬 개발 서버 등)에서 온 업로드 거부
+	// Reject uploads from another port on the same host (e.g. a local dev server)
 	body, contentType = buildRecordingForm(t, "X", "audio/webm", `{}`)
 	req, _ = http.NewRequest(http.MethodPost, ts.URL+apiRecordingPath, body)
 	req.Header.Set("Content-Type", contentType)
@@ -332,7 +332,7 @@ func TestHandleRecordingRejections(t *testing.T) {
 		t.Errorf("other-port status = %d, want 403", res.StatusCode)
 	}
 
-	// meta가 JSON 객체가 아니면 거부 (배열, null 모두)
+	// Reject meta that is not a JSON object (both arrays and null)
 	for _, badMeta := range []string{`[1,2,3]`, `null`, `"str"`, ``} {
 		body, contentType = buildRecordingForm(t, "X", "audio/webm", badMeta)
 		req, _ = http.NewRequest(http.MethodPost, ts.URL+apiRecordingPath, body)
@@ -347,8 +347,8 @@ func TestHandleRecordingRejections(t *testing.T) {
 		}
 	}
 
-	// 거부 케이스에서 디렉토리가 생성되지 않아야 한다
+	// Rejected requests must not create a directory
 	if _, err := os.Stat(filepath.Join(root, recordingsDirName)); !os.IsNotExist(err) {
-		t.Errorf("거부된 요청이 %s 디렉토리를 생성함", recordingsDirName)
+		t.Errorf("rejected request created the %s directory", recordingsDirName)
 	}
 }

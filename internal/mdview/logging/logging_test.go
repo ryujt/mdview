@@ -14,30 +14,30 @@ func ts(sec int) time.Time {
 }
 
 func TestSanitizeLabel(t *testing.T) {
-	got := sanitizeLabel(`API "호출" (실패) {오류} | #3 <검사>` + "\n다음 줄")
-	for _, banned := range []string{`"`, "(", ")", "{", "}", "|", "#", "<검사>"} {
+	got := sanitizeLabel(`API "call" (failed) {error} | #3 <check>` + "\nnext line")
+	for _, banned := range []string{`"`, "(", ")", "{", "}", "|", "#", "<check>"} {
 		if strings.Contains(got, banned) {
-			t.Errorf("금지 문자 %q 잔존: %q", banned, got)
+			t.Errorf("banned character %q remains: %q", banned, got)
 		}
 	}
-	for _, want := range []string{"'호출'", "[실패]", "[오류]", "No.3", "&lt;검사&gt;", "<br/>"} {
+	for _, want := range []string{"'call'", "[failed]", "[error]", "No.3", "&lt;check&gt;", "<br/>"} {
 		if !strings.Contains(got, want) {
-			t.Errorf("치환 결과 %q 없음: %q", want, got)
+			t.Errorf("replacement %q missing: %q", want, got)
 		}
 	}
-	if sanitizeLabel("세미콜론; 구분") != "세미콜론, 구분" {
-		t.Errorf("세미콜론 치환 실패: %q", sanitizeLabel("세미콜론; 구분"))
+	if sanitizeLabel("semicolon; separated") != "semicolon, separated" {
+		t.Errorf("semicolon replacement failed: %q", sanitizeLabel("semicolon; separated"))
 	}
 }
 
 func TestRenderSequentialFlow(t *testing.T) {
-	// strategy 없는 execution들은 순차 체인으로 연결되어야 한다 (fan-out 아님).
+	// Executions without a strategy must be chained sequentially (not fan-out).
 	events := []ProcessEvent{
-		{Timestamp: ts(0), Phase: "start", EventType: "start", NodeLabel: "전사 시작"},
-		{Timestamp: ts(1), Phase: "execution", EventType: "step_ok", NodeLabel: "오디오 탐색"},
-		{Timestamp: ts(2), Phase: "execution", EventType: "step_ok", NodeLabel: "whisper 전사"},
-		{Timestamp: ts(3), Phase: "synthesis", EventType: "end", NodeLabel: "문서 생성"},
-		{Timestamp: ts(4), Phase: "end", EventType: "end", NodeLabel: "완료"},
+		{Timestamp: ts(0), Phase: "start", EventType: "start", NodeLabel: "Start transcription"},
+		{Timestamp: ts(1), Phase: "execution", EventType: "step_ok", NodeLabel: "Find audio"},
+		{Timestamp: ts(2), Phase: "execution", EventType: "step_ok", NodeLabel: "whisper transcription"},
+		{Timestamp: ts(3), Phase: "synthesis", EventType: "end", NodeLabel: "Generate document"},
+		{Timestamp: ts(4), Phase: "end", EventType: "end", NodeLabel: "Done"},
 	}
 	md := MermaidRenderer{}.Render(events, "abc12345", "/logs/s1")
 
@@ -45,10 +45,10 @@ func TestRenderSequentialFlow(t *testing.T) {
 		"# Process Flow",
 		"| Session ID | `abc12345` |",
 		"flowchart TD",
-		`N0(["전사 시작"])`,
-		`N1["오디오 탐색"]`,
+		`N0(["Start transcription"])`,
+		`N1["Find audio"]`,
 		"N0 --> N1",
-		"N1 --> N2", // 전략 없는 실행 단계는 순차 체인
+		"N1 --> N2", // execution steps without a strategy form a sequential chain
 		"N2 --> N3",
 		"N3 --> N4",
 		"class N1 step_ok;",
@@ -56,22 +56,22 @@ func TestRenderSequentialFlow(t *testing.T) {
 	}
 	for _, w := range wants {
 		if !strings.Contains(md, w) {
-			t.Errorf("렌더 결과에 %q 없음\n---\n%s", w, md)
+			t.Errorf("render output missing %q\n---\n%s", w, md)
 		}
 	}
 	if strings.Contains(md, "N0 --> N2") {
-		t.Errorf("전략 없는 실행 단계가 fan-out으로 그려짐\n%s", md)
+		t.Errorf("execution steps without a strategy were drawn as fan-out\n%s", md)
 	}
 }
 
 func TestRenderFanOutFanIn(t *testing.T) {
 	events := []ProcessEvent{
-		{Timestamp: ts(0), Phase: "start", EventType: "start", NodeLabel: "시작"},
-		{Timestamp: ts(1), Phase: "strategy", EventType: "start", NodeLabel: "계획", Iteration: 1},
-		{Timestamp: ts(2), Phase: "execution", EventType: "step_ok", NodeLabel: "작업 A", Iteration: 1},
-		{Timestamp: ts(3), Phase: "execution", EventType: "step_err", NodeLabel: "작업 B", Iteration: 1},
-		{Timestamp: ts(4), Phase: "synthesis", EventType: "end", NodeLabel: "종합", Iteration: 1},
-		{Timestamp: ts(5), Phase: "end", EventType: "end", NodeLabel: "완료"},
+		{Timestamp: ts(0), Phase: "start", EventType: "start", NodeLabel: "Start"},
+		{Timestamp: ts(1), Phase: "strategy", EventType: "start", NodeLabel: "Plan", Iteration: 1},
+		{Timestamp: ts(2), Phase: "execution", EventType: "step_ok", NodeLabel: "Task A", Iteration: 1},
+		{Timestamp: ts(3), Phase: "execution", EventType: "step_err", NodeLabel: "Task B", Iteration: 1},
+		{Timestamp: ts(4), Phase: "synthesis", EventType: "end", NodeLabel: "Synthesize", Iteration: 1},
+		{Timestamp: ts(5), Phase: "end", EventType: "end", NodeLabel: "Done"},
 	}
 	md := MermaidRenderer{}.Render(events, "s", "")
 
@@ -81,50 +81,50 @@ func TestRenderFanOutFanIn(t *testing.T) {
 		"class N3 step_err;",
 	} {
 		if !strings.Contains(md, w) {
-			t.Errorf("fan-out/fan-in 엣지 %q 없음\n%s", w, md)
+			t.Errorf("fan-out/fan-in edge %q missing\n%s", w, md)
 		}
 	}
 }
 
 func TestRenderDecisionBranches(t *testing.T) {
 	events := []ProcessEvent{
-		{Timestamp: ts(0), Phase: "start", EventType: "start", NodeLabel: "시작"},
-		{Timestamp: ts(1), Phase: "decision", EventType: "branch_fail", NodeLabel: "판정 1"},
-		{Timestamp: ts(2), Phase: "strategy", EventType: "start", NodeLabel: "재계획"},
-		{Timestamp: ts(3), Phase: "decision", EventType: "branch_ok", NodeLabel: "판정 2"},
-		{Timestamp: ts(4), Phase: "end", EventType: "end", NodeLabel: "완료"},
+		{Timestamp: ts(0), Phase: "start", EventType: "start", NodeLabel: "Start"},
+		{Timestamp: ts(1), Phase: "decision", EventType: "branch_fail", NodeLabel: "Check 1"},
+		{Timestamp: ts(2), Phase: "strategy", EventType: "start", NodeLabel: "Replan"},
+		{Timestamp: ts(3), Phase: "decision", EventType: "branch_ok", NodeLabel: "Check 2"},
+		{Timestamp: ts(4), Phase: "end", EventType: "end", NodeLabel: "Done"},
 	}
 	md := MermaidRenderer{}.Render(events, "s", "")
 
 	if !strings.Contains(md, `N1 -->|"below threshold"| N2`) {
-		t.Errorf("branch_fail → strategy 엣지 없음\n%s", md)
+		t.Errorf("branch_fail -> strategy edge missing\n%s", md)
 	}
 	if !strings.Contains(md, `N3 -->|"threshold met"| N4`) {
-		t.Errorf("branch_ok → end 엣지 없음\n%s", md)
+		t.Errorf("branch_ok -> end edge missing\n%s", md)
 	}
-	if !strings.Contains(md, `N1{"판정 1"}`) {
-		t.Errorf("decision 마름모 노드 없음\n%s", md)
+	if !strings.Contains(md, `N1{"Check 1"}`) {
+		t.Errorf("decision diamond node missing\n%s", md)
 	}
-	// 무레이블 N3-->N4가 레이블 엣지로 교체되어야 한다
+	// The unlabeled N3-->N4 must be replaced by the labeled edge
 	if strings.Contains(md, "N3 --> N4\n") {
-		t.Errorf("무레이블 엣지가 레이블 엣지로 교체되지 않음\n%s", md)
+		t.Errorf("unlabeled edge was not replaced by the labeled edge\n%s", md)
 	}
 }
 
 func TestRenderArtifactLinks(t *testing.T) {
 	events := []ProcessEvent{
-		{Timestamp: ts(0), Phase: "start", EventType: "start", NodeLabel: "시작"},
-		{Timestamp: ts(1), Phase: "execution", EventType: "step_ok", NodeLabel: "전사",
+		{Timestamp: ts(0), Phase: "start", EventType: "start", NodeLabel: "Start"},
+		{Timestamp: ts(1), Phase: "execution", EventType: "step_ok", NodeLabel: "Transcribe",
 			ArtifactPath: "/logs/s1/whisper/x_ok.md"},
-		{Timestamp: ts(2), Phase: "end", EventType: "end", NodeLabel: "끝"},
+		{Timestamp: ts(2), Phase: "end", EventType: "end", NodeLabel: "End"},
 	}
 	md := MermaidRenderer{}.Render(events, "s", "/logs/s1")
 
 	if !strings.Contains(md, `click N1 "whisper/x_ok.md" "Open artifact"`) {
-		t.Errorf("click 링크(상대 경로) 없음\n%s", md)
+		t.Errorf("click link (relative path) missing\n%s", md)
 	}
 	if !strings.Contains(md, "## Artifacts") || !strings.Contains(md, "| N1 | step_ok | `whisper/x_ok.md` |") {
-		t.Errorf("Artifacts 테이블 없음\n%s", md)
+		t.Errorf("Artifacts table missing\n%s", md)
 	}
 }
 
@@ -144,78 +144,78 @@ func TestSessionLifecycle(t *testing.T) {
 	id := StartSession()
 	defer EndSession()
 	if len(id) != 8 {
-		t.Fatalf("세션 ID 길이 = %d, want 8 (%q)", len(id), id)
+		t.Fatalf("session ID length = %d, want 8 (%q)", len(id), id)
 	}
 
-	// 세션 디렉토리 + 카테고리 하위 디렉토리
+	// Session directory + category subdirectories
 	entries, err := os.ReadDir(dir)
 	if err != nil || len(entries) != 1 || !entries[0].IsDir() {
-		t.Fatalf("세션 디렉토리가 1개 생성되어야 함: %v", entries)
+		t.Fatalf("expected exactly one session directory: %v", entries)
 	}
 	sessionDir := filepath.Join(dir, entries[0].Name())
 	if !strings.HasSuffix(entries[0].Name(), "-001") {
-		t.Errorf("세션 디렉토리 시퀀스 접미사 없음: %s", entries[0].Name())
+		t.Errorf("session directory missing sequence suffix: %s", entries[0].Name())
 	}
 	for _, sub := range categorySubdirs {
 		if fi, err := os.Stat(filepath.Join(sessionDir, sub)); err != nil || !fi.IsDir() {
-			t.Errorf("카테고리 디렉토리 %s 없음", sub)
+			t.Errorf("category directory %s missing", sub)
 		}
 	}
 
-	// 1계층 텍스트 로그
-	Info("테스트 메시지 %d", 42)
+	// Tier-1 text log
+	Info("test message %d", 42)
 	logPath := LogFilePath()
 	data, err := os.ReadFile(logPath)
 	if err != nil {
-		t.Fatalf("세션 로그 파일 읽기 실패: %v", err)
+		t.Fatalf("failed to read session log file: %v", err)
 	}
-	if !strings.Contains(string(data), "테스트 메시지 42") {
-		t.Errorf("텍스트 로그에 메시지 없음:\n%s", data)
+	if !strings.Contains(string(data), "test message 42") {
+		t.Errorf("message missing from text log:\n%s", data)
 	}
 
-	// 2계층 아티팩트: 파일명 컨벤션 + 순번 + ok/err
-	p1 := LogArtifact("whisper", "Whisper 전사 호출", [][2]string{{"모델", "whisper-1"}},
-		[]Section{{Title: "요청", Body: "model=whisper-1"}}, "")
-	p2 := LogArtifact("whisper", "Whisper 전사 호출", nil, nil, "boom")
+	// Tier-2 artifacts: filename convention + sequence + ok/err
+	p1 := LogArtifact("whisper", "Whisper transcription call", [][2]string{{"Model", "whisper-1"}},
+		[]Section{{Title: "Request", Body: "model=whisper-1"}}, "")
+	p2 := LogArtifact("whisper", "Whisper transcription call", nil, nil, "boom")
 	if !strings.Contains(filepath.Base(p1), "_whisper_001_ok.md") {
-		t.Errorf("아티팩트 파일명 컨벤션 위반: %s", p1)
+		t.Errorf("artifact filename convention violated: %s", p1)
 	}
 	if !strings.Contains(filepath.Base(p2), "_whisper_002_err.md") {
-		t.Errorf("실패 아티팩트 파일명 컨벤션 위반: %s", p2)
+		t.Errorf("failed artifact filename convention violated: %s", p2)
 	}
 	if !strings.Contains(filepath.Base(p1), id+"_") {
-		t.Errorf("파일명에 세션 ID 접두어 없음: %s", p1)
+		t.Errorf("filename missing session ID prefix: %s", p1)
 	}
 	body, _ := os.ReadFile(p2)
-	if !strings.Contains(string(body), "## 에러") || !strings.Contains(string(body), "boom") {
-		t.Errorf("실패 아티팩트에 에러 섹션 없음:\n%s", body)
+	if !strings.Contains(string(body), "## Error") || !strings.Contains(string(body), "boom") {
+		t.Errorf("failed artifact missing Error section:\n%s", body)
 	}
 
-	// 상태 스냅샷
+	// State snapshot
 	sp := LogStateSnapshot("startup", map[string]any{"mode": "folder"})
 	var snap map[string]any
 	rawSnap, err := os.ReadFile(sp)
 	if err != nil || json.Unmarshal(rawSnap, &snap) != nil {
-		t.Fatalf("스냅샷 JSON 읽기/파싱 실패: %v", err)
+		t.Fatalf("failed to read/parse snapshot JSON: %v", err)
 	}
 	if snap["meta"].(map[string]any)["trigger"] != "startup" {
-		t.Errorf("스냅샷 trigger 누락: %v", snap)
+		t.Errorf("snapshot missing trigger: %v", snap)
 	}
 
-	// 프로세스 이벤트 → EndSession 시 다이어그램 생성
-	LogProcessEvent("start", "start", "세션 시작", nil)
-	LogProcessEvent("execution", "step_ok", "전사", &EventOpts{ArtifactPath: p1})
-	LogProcessEvent("end", "end", "세션 종료", nil)
+	// Process events -> diagram generated at EndSession
+	LogProcessEvent("start", "start", "Session start", nil)
+	LogProcessEvent("execution", "step_ok", "Transcribe", &EventOpts{ArtifactPath: p1})
+	LogProcessEvent("end", "end", "Session end", nil)
 	EndSession()
 
 	processFiles, _ := filepath.Glob(filepath.Join(sessionDir, "process", "*_process.md"))
 	if len(processFiles) != 1 {
-		t.Fatalf("프로세스 다이어그램이 1개 생성되어야 함: %v", processFiles)
+		t.Fatalf("expected exactly one process diagram: %v", processFiles)
 	}
 	diagram, _ := os.ReadFile(processFiles[0])
 	if !strings.Contains(string(diagram), "flowchart TD") ||
 		!strings.Contains(string(diagram), "whisper/") {
-		t.Errorf("다이어그램 내용 이상:\n%s", diagram)
+		t.Errorf("unexpected diagram content:\n%s", diagram)
 	}
 }
 
@@ -239,10 +239,10 @@ func TestCleanupOldLogs(t *testing.T) {
 	EndSession()
 
 	if _, err := os.Stat(oldFile); !os.IsNotExist(err) {
-		t.Error("7일 지난 로그 파일이 정리되지 않음")
+		t.Error("log file older than 7 days was not cleaned up")
 	}
 	if _, err := os.Stat(oldDir); !os.IsNotExist(err) {
-		t.Error("빈 로그 디렉토리가 정리되지 않음")
+		t.Error("empty log directory was not cleaned up")
 	}
 }
 
@@ -255,14 +255,14 @@ func TestDisabledWithoutEnv(t *testing.T) {
 	id := StartSession()
 	defer EndSession()
 	if id != "" {
-		t.Errorf("파일 기록 꺼짐 상태에서 세션 ID = %q, want 빈 문자열", id)
+		t.Errorf("session ID with file logging off = %q, want empty string", id)
 	}
 	if p := LogArtifact("whisper", "t", nil, nil, ""); p != "" {
-		t.Errorf("꺼짐 상태에서 아티팩트가 저장됨: %s", p)
+		t.Errorf("artifact saved while file logging off: %s", p)
 	}
 	entries, _ := os.ReadDir(dir)
 	if len(entries) != 0 {
-		t.Errorf("꺼짐 상태에서 디렉토리 생성됨: %v", entries)
+		t.Errorf("directory created while file logging off: %v", entries)
 	}
 }
 
@@ -275,20 +275,20 @@ func TestLogLevelFiltering(t *testing.T) {
 
 	StartSession()
 	defer EndSession()
-	Debug("디버그는 걸러짐")
-	Info("인포도 걸러짐")
-	Warn("워닝은 남음")
-	Error("에러도 남음")
+	Debug("debug is filtered out")
+	Info("info is filtered out too")
+	Warn("warning is kept")
+	Error("error is kept too")
 
 	data, err := os.ReadFile(LogFilePath())
 	if err != nil {
 		t.Fatal(err)
 	}
 	s := string(data)
-	if strings.Contains(s, "걸러짐") {
-		t.Errorf("레벨 필터가 동작하지 않음:\n%s", s)
+	if strings.Contains(s, "filtered out") {
+		t.Errorf("level filter did not work:\n%s", s)
 	}
-	if !strings.Contains(s, "워닝은 남음") || !strings.Contains(s, "에러도 남음") {
-		t.Errorf("WARN 이상이 기록되지 않음:\n%s", s)
+	if !strings.Contains(s, "warning is kept") || !strings.Contains(s, "error is kept too") {
+		t.Errorf("WARN and above were not logged:\n%s", s)
 	}
 }

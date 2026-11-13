@@ -117,7 +117,7 @@ fi
 mkdir "$OUT"
 mv "$WORK/$NAME.pkg" "$OUT/"
 cp docs/INSTALL-macos-arm64.md "$OUT/INSTALL.md"
-cp packaging/macos/START-HERE.html "$OUT/시작하기.html"
+cp packaging/macos/START-HERE.html "$OUT/START-HERE.html"
 cp "$APP/Contents/Resources/THIRD-PARTY-NOTICES.txt" "$OUT/THIRD-PARTY-NOTICES.txt"
 cp -R "$WORK/reports" "$OUT/verification"
 (

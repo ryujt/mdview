@@ -1,6 +1,6 @@
 package mdview
 
-// Mode는 mdview 실행 방식을 나타낸다.
+// Mode describes how mdview is running.
 type Mode string
 
 const (
@@ -8,15 +8,15 @@ const (
 	ModeFolder Mode = "folder"
 )
 
-// ModeInfo는 프론트엔드에 현재 실행 모드를 알려주는 DTO이다.
+// ModeInfo is the DTO that tells the frontend the current run mode.
 type ModeInfo struct {
 	Mode     Mode   `json:"mode"`
 	Filename string `json:"filename,omitempty"`
 	Root     string `json:"root,omitempty"`
 }
 
-// TreeNode는 디렉토리 트리의 단일 노드를 표현한다.
-// Path는 루트 디렉토리 기준 상대 경로이며 슬래시 구분자를 사용한다.
+// TreeNode represents a single node in the directory tree.
+// Path is relative to the root directory and uses slash separators.
 type TreeNode struct {
 	Name     string      `json:"name"`
 	Path     string      `json:"path"`
@@ -24,48 +24,48 @@ type TreeNode struct {
 	Children []*TreeNode `json:"children,omitempty"`
 }
 
-// FileMessage는 folder 모드에서 WS를 통해 전달되는 메시지이다.
-// file 모드는 하위 호환을 위해 raw 텍스트를 전달한다.
+// FileMessage is the message sent over WS in folder mode.
+// File mode sends raw text for backward compatibility.
 type FileMessage struct {
 	Path    string `json:"path"`
 	Content string `json:"content"`
 }
 
-// RecordingResult는 녹화 저장 API(/api/recording)의 응답 DTO이다.
+// RecordingResult is the response DTO of the recording save API (/api/recording).
 type RecordingResult struct {
 	Dir    string `json:"dir"`
 	Audio  string `json:"audio"`
 	Events string `json:"events"`
-	// ID는 녹화 디렉토리 이름 (전사 상태 조회 키)
+	// ID is the recording directory name (key for transcription status lookups)
 	ID string `json:"id"`
-	// Transcribing은 백그라운드 후처리(전사·프롬프트)가 시작되었는지 여부
+	// Transcribing reports whether background post-processing (transcription, prompt) has started
 	Transcribing bool `json:"transcribing"`
 }
 
-// 자동 전사 작업 상태
+// Auto-transcription job states
 const (
 	TranscribeStateRunning = "transcribing"
 	TranscribeStateDone    = "done"
 	TranscribeStateError   = "error"
 )
 
-// TranscribeJob은 녹화 자동 전사 작업의 상태 DTO이다 (/api/recording/status).
+// TranscribeJob is the status DTO of a recording's auto-transcription job (/api/recording/status).
 type TranscribeJob struct {
 	ID    string `json:"id"`
 	State string `json:"state"`
 	Dir   string `json:"dir"`
-	// Transcript는 완료 시 transcript.json 절대 경로
+	// Transcript is the absolute path of transcript.json once complete
 	Transcript string `json:"transcript,omitempty"`
-	// TranscriptRel은 folder 모드에서 루트 기준 상대 경로 (뷰어에서 바로 열기용)
+	// TranscriptRel is the root-relative path in folder mode (for opening directly in the viewer)
 	TranscriptRel string `json:"transcriptRel,omitempty"`
-	// Prompt는 항상 생성되는 prompt.txt 절대 경로 (후처리 성공 시)
+	// Prompt is the absolute path of the always-generated prompt.txt (when post-processing succeeds)
 	Prompt string `json:"prompt,omitempty"`
-	// PromptRel은 folder 모드에서 루트 기준 상대 경로
+	// PromptRel is the root-relative path in folder mode
 	PromptRel string `json:"promptRel,omitempty"`
 	Error     string `json:"error,omitempty"`
-	// Note는 전사를 생략·실패한 사유 등 사용자에게 보여 줄 짧은 안내
+	// Note is a short user-facing message, e.g. why transcription was skipped or failed
 	Note string `json:"note,omitempty"`
-	// ClipboardCopied는 transcript.json 전체 내용을 시스템 클립보드에 복사했는지 나타낸다.
+	// ClipboardCopied reports whether the full transcript.json was copied to the system clipboard.
 	ClipboardCopied   bool   `json:"clipboardCopied"`
 	ClipboardError    string `json:"clipboardError,omitempty"`
 	NotificationError string `json:"notificationError,omitempty"`

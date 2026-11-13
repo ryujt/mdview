@@ -147,7 +147,7 @@ function renderDirective(name, attrs, inner) {
   const caption = captionMatch ? captionMatch[1] : '';
   // Pre-render inner markdown to HTML so the directive becomes a self-contained
   // HTML block (avoids blank-line / block-parser interactions).
-  // 이 경로는 블록 렌더러를 거치지 않으므로 CJK 인접 강조 보정을 직접 적용한다.
+  // This path bypasses the block renderer, so apply the CJK-adjacent emphasis fix-up directly.
   const innerHtml = window.marked.parse(fixCjkEmphasis(inner.trim()));
 
   const calloutTypes = ['success', 'warning', 'danger', 'info', 'note', 'tip'];
@@ -161,9 +161,9 @@ function renderDirective(name, attrs, inner) {
   return `<div class="smart-callout info"><div class="smart-callout-title">${escapeHtml(name)}${title ? ' — ' + escapeHtml(title) : ''}</div>${innerHtml}</div>`;
 }
 
-// ```text 영역은 SmartMD 변환 대상이 아니다 — 내부의 {attr}/{{var}}/::: 등이
-// 원문 그대로 보여야 하므로, 영역을 한 줄짜리 자리표시자로 치환해 두었다가
-// 모든 변환이 끝난 뒤 원문으로 되돌린다.
+// ```text regions are not subject to SmartMD transforms — the {attr}/{{var}}/::: etc. inside must
+// appear verbatim, so each region is swapped for a one-line placeholder and restored to the
+// original text after all transforms finish.
 function maskTextFences(src) {
   const lines = src.split('\n');
   const regions = [];

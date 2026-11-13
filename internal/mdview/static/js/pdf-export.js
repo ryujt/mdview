@@ -1,18 +1,18 @@
-// pdf-export.js — 툴바 「내보내기」 메뉴의 PDF 저장 Worker
+// pdf-export.js — PDF save Worker for the toolbar "Export" menu
 //
-// 선택되어 렌더링 중인 문서를 PDF로 내보낸다.
-// - 마크다운·코드뷰어: 인쇄 전용 스타일(@media print)로 뷰어 UI를 숨기고 브라우저 인쇄(PDF로 저장)를 연다.
-// - HTML 미리보기: 원본 HTML을 별도 sandbox iframe(srcdoc)에 다시 열어 그 문서만 인쇄한다.
-//   미리보기 iframe은 다른 출처라 부모가 인쇄를 호출할 수 없고, 부모 인쇄는 iframe이 보이는 영역만 담기 때문이다.
-// - PDF 파일: 이미 PDF이므로 원본 파일을 그대로 다운로드한다.
-// ⌘P / Ctrl+P도 같은 경로로 처리해 문서 종류와 무관하게 같은 결과를 낸다.
+// Exports the selected, currently rendered document as PDF.
+// - Markdown/code viewer: hides the viewer UI with print-only styles (@media print) and opens browser printing (Save as PDF).
+// - HTML preview: reopens the original HTML in a separate sandbox iframe (srcdoc) and prints only that document,
+//   because the preview iframe is cross-origin so the parent cannot call print on it, and printing the parent only captures the visible part of the iframe.
+// - PDF file: already a PDF, so the original file is downloaded as is.
+// ⌘P / Ctrl+P go through the same path, giving the same result regardless of document type.
 
 import { showToast } from './recorder.js';
 
 const PRINT_DELAY_MS = 300;
 const PRINT_START_MESSAGE = 'mdview-print-start';
 const PRINT_MESSAGE = 'mdview-print-done';
-// 인쇄 프레임이 이 시간 안에 시작 신호를 보내지 않으면 실패로 보고 정리한다(CSP 차단, load 미발생 등).
+// If the print frame does not send a start signal within this time, treat it as failed and clean up (CSP block, no load event, etc.).
 const PRINT_START_TIMEOUT_MS = 30000;
 const PRINT_FRAME_ID = 'pdf-export-frame';
 const DEFAULT_BASE_NAME = 'document';
@@ -29,7 +29,7 @@ let printStarted = false;
 let printTimer = 0;
 
 /**
- * 경로에서 확장자를 뺀 파일 이름을 PDF 기본 이름으로 쓴다.
+ * Uses the file name from the path, minus its extension, as the default PDF name.
  * @param {string} path
  */
 export function exportBaseName(path) {
@@ -39,12 +39,12 @@ export function exportBaseName(path) {
 }
 
 /**
- * 인쇄용 HTML을 만든다: 상대 경로 유지를 위한 <base>와 로드 후 인쇄 스크립트를 넣는다.
- * srcdoc 문서의 기준 URL은 뷰어 페이지이므로, 문서에 <base href>가 있으면 원본 위치 기준 절대 URL로 바꾸고
- * 없으면 원본 문서 URL을 <base>로 넣는다.
- * @param {string} html  원본 HTML
- * @param {string} baseHref  원본 문서의 절대 URL
- * @param {string} [title]  인쇄 대화상자의 기본 파일 이름으로 쓸 문서 제목
+ * Builds printable HTML: inserts a <base> to keep relative paths working and a print-on-load script.
+ * A srcdoc document's base URL is the viewer page, so an existing <base href> is rewritten to an absolute URL
+ * relative to the original location; otherwise the original document URL is inserted as <base>.
+ * @param {string} html  Original HTML
+ * @param {string} baseHref  Absolute URL of the original document
+ * @param {string} [title]  Document title to use as the print dialog's default file name
  */
 export function buildPrintableHtml(html, baseHref, title) {
   const source = String(html || '');
@@ -62,7 +62,7 @@ export function buildPrintableHtml(html, baseHref, title) {
     try {
       absolute = new URL(value, baseHref).href;
     } catch {
-      // 해석할 수 없는 href는 문서에 있는 그대로 둔다.
+      // Leave unresolvable hrefs as they are in the document.
     }
     const start = baseHrefMatch.index + baseHrefMatch[0].search(/\bhref\s*=/i);
     const end = baseHrefMatch.index + baseHrefMatch[0].length;
@@ -71,13 +71,13 @@ export function buildPrintableHtml(html, baseHref, title) {
     const at = headInsertIndex(source);
     out = source.slice(0, at) + `<base href="${escapeAttr(baseHref)}">` + source.slice(at);
   }
-  // 앞쪽 스크립트 문자열·주석의 '</body>'를 피하려고 마지막 </body> 앞에 넣는다.
+  // Insert before the last </body> to avoid '</body>' inside earlier script strings or comments.
   const bodyEnd = [...out.matchAll(/<\/body\s*>/gi)].pop();
   return bodyEnd ? out.slice(0, bodyEnd.index) + script + out.slice(bodyEnd.index) : out + script;
 }
 
-// <base>를 넣을 위치: <head> 뒤 → <html> 뒤 → 선행 doctype 뒤 → 맨 앞.
-// doctype 앞에 내용이 생기면 문서가 quirks 모드로 렌더링되므로 doctype 뒤를 지킨다.
+// Where to insert <base>: after <head> → after <html> → after a leading doctype → at the very start.
+// Content before the doctype would render the document in quirks mode, so stay after the doctype.
 function headInsertIndex(source) {
   for (const pattern of [/<head(\s[^>]*)?>/i, /<html(\s[^>]*)?>/i, /^\s*(?:<!--[\s\S]*?-->\s*)*<!doctype[^>]*>/i]) {
     const m = pattern.exec(source);
@@ -86,14 +86,14 @@ function headInsertIndex(source) {
   return 0;
 }
 
-// 인라인 스크립트 안의 JS 문자열: '</script>'로 스크립트가 닫히지 않게 '<'를 이스케이프한다.
+// JS string inside an inline script: escape '<' so '</script>' cannot close the script.
 function scriptString(value) {
   return JSON.stringify(String(value)).replace(/</g, '\\u003c');
 }
 
 /**
- * 하이라이트된 코드 HTML(span + 이스케이프된 텍스트)을 라인별 HTML로 나눈다.
- * 여러 줄에 걸친 span은 줄 끝에서 닫고 다음 줄에서 다시 연다.
+ * Splits highlighted code HTML (spans + escaped text) into per-line HTML.
+ * Spans that cross lines are closed at the end of a line and reopened on the next.
  * @param {string} html
  * @returns {string[]}
  */
@@ -152,7 +152,7 @@ export function initPdfExport(options) {
     }
   });
   exportItem.addEventListener('click', () => {
-    // disabled 대신 aria-disabled를 써서 포커스와 안내(title)는 유지하고 실행만 막는다.
+    // Use aria-disabled instead of disabled to keep focus and the hint (title) while blocking only the action.
     if (exportItem.getAttribute('aria-disabled') === 'true') return;
     closeMenu();
     exportPdf();
@@ -176,7 +176,7 @@ export function initPdfExport(options) {
       items[next]?.focus();
     }
   });
-  // Tab 등으로 포커스가 메뉴 밖으로 나가면 닫는다.
+  // Close when focus leaves the menu (e.g. via Tab).
   menuList.addEventListener('focusout', (e) => {
     if (!menuList.hidden && !(e.relatedTarget && e.relatedTarget.closest('#export-menu-wrap'))) closeMenu();
   });
@@ -185,15 +185,15 @@ export function initPdfExport(options) {
   });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && !menuList.hidden) closeMenu();
-    // ⌘P(macOS) / Ctrl+P: 문서가 열려 있으면 문서 종류별 PDF 저장으로 처리한다.
-    // 한글 입력 상태에서는 e.key가 'ㅔ'로 오므로 물리 키(e.code)도 본다.
+    // ⌘P (macOS) / Ctrl+P: if a document is open, handle it as a type-specific Save as PDF.
+    // With the Korean IME active, e.key arrives as 'ㅔ', so also check the physical key (e.code).
     if (isPrintShortcut(e)) {
       if (!getTarget() || document.querySelector('dialog[open]')) return;
       e.preventDefault();
       exportPdf();
     }
   });
-  // 브라우저 메뉴로 인쇄해도 같은 인쇄용 코드뷰가 쓰이도록 인쇄 이벤트에서 만든다.
+  // Build it in the print events so the same printable code view is used even when printing from the browser menu.
   window.addEventListener('beforeprint', buildCodePrintViews);
   window.addEventListener('afterprint', removeCodePrintViews);
   window.addEventListener('message', (e) => {
@@ -213,8 +213,8 @@ function isPrintShortcut(e) {
 function openMenu() {
   const target = getTarget();
   exportItem.setAttribute('aria-disabled', target ? 'false' : 'true');
-  exportItem.textContent = target && target.kind === 'pdf' ? '원본 PDF 다운로드' : 'PDF로 저장…';
-  exportItem.title = target ? '' : '먼저 문서를 선택하세요';
+  exportItem.textContent = target && target.kind === 'pdf' ? 'Download original PDF' : 'Save as PDF…';
+  exportItem.title = target ? '' : 'Select a document first';
   updateZipItem();
   menuList.hidden = false;
   menuButton.setAttribute('aria-expanded', 'true');
@@ -225,8 +225,8 @@ function updateZipItem() {
   const target = getMarkdownTarget();
   zipItem.setAttribute('aria-disabled', zipBusy || !target ? 'true' : 'false');
   zipItem.setAttribute('aria-busy', zipBusy ? 'true' : 'false');
-  zipItem.textContent = zipBusy ? 'ZIP 생성 중…' : '마크다운 ZIP으로 저장…';
-  zipItem.title = zipBusy ? 'ZIP을 생성하고 있습니다' : target ? '' : '마크다운 문서를 먼저 선택하세요';
+  zipItem.textContent = zipBusy ? 'Creating ZIP…' : 'Save as Markdown ZIP…';
+  zipItem.title = zipBusy ? 'Creating the ZIP' : target ? '' : 'Select a Markdown document first';
 }
 
 function closeMenu() {
@@ -234,17 +234,17 @@ function closeMenu() {
   menuButton.setAttribute('aria-expanded', 'false');
 }
 
-/** 현재 마크다운 전체 원문과 다이어그램을 일반 뷰어용 ZIP으로 저장한다. */
+/** Saves the full current Markdown source and its diagrams as a ZIP for ordinary viewers. */
 export async function exportMarkdownZip() {
   if (zipBusy) return;
   const target = getMarkdownTarget();
   if (!target) {
-    showToast('ZIP으로 저장할 마크다운 문서를 먼저 선택하세요.', { error: true });
+    showToast('Select a Markdown document to save as ZIP first.', { error: true });
     return;
   }
   zipBusy = true;
   updateZipItem();
-  showToast('ZIP 생성 중…');
+  showToast('Creating ZIP…');
   try {
     const { createMarkdownZip } = await import('./markdown-export.js');
     const { blob } = await createMarkdownZip(target.markdown);
@@ -254,20 +254,20 @@ export async function exportMarkdownZip() {
     } finally {
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
-    showToast('마크다운 ZIP이 다운로드되었습니다.');
+    showToast('Markdown ZIP downloaded.');
   } catch (error) {
-    showToast(`ZIP 생성 실패: ${error.message || error}`, { error: true });
+    showToast(`ZIP creation failed: ${error.message || error}`, { error: true });
   } finally {
     zipBusy = false;
     updateZipItem();
   }
 }
 
-/** 현재 문서를 PDF로 내보낸다. */
+/** Exports the current document as PDF. */
 export async function exportPdf() {
   const target = getTarget();
   if (!target) {
-    showToast('PDF로 저장할 문서를 먼저 선택하세요.', { error: true });
+    showToast('Select a document to save as PDF first.', { error: true });
     return;
   }
   const name = exportBaseName(target.name);
@@ -282,7 +282,7 @@ export async function exportPdf() {
   printPage(name);
 }
 
-// 인쇄 대화상자의 기본 파일 이름은 document.title을 따르므로 잠시 바꿨다가 되돌린다.
+// The print dialog's default file name follows document.title, so change it temporarily and restore it.
 function printPage(name) {
   const previous = document.title;
   document.title = name;
@@ -294,13 +294,13 @@ function printPage(name) {
   try {
     window.print();
   } finally {
-    // afterprint를 보내지 않는 브라우저 대비
+    // For browsers that never fire afterprint
     setTimeout(restore, 0);
   }
 }
 
-// 코드뷰어는 라인 번호(gutter)와 본문이 별도 열이라 줄바꿈하면 번호가 어긋난다.
-// 인쇄 동안만 라인별 행으로 된 표를 만들어, 긴 줄을 줄바꿈해도 번호가 맞게 한다.
+// The code viewer keeps line numbers (gutter) and code in separate columns, so wrapping misaligns the numbers.
+// While printing, build a table with one row per line so numbers stay aligned even when long lines wrap.
 function buildCodePrintViews() {
   removeCodePrintViews();
   for (const viewer of document.querySelectorAll('#preview .code-viewer')) {
@@ -345,26 +345,26 @@ async function printHtml(url, name) {
     if (!res.ok) throw new Error(String(res.status));
     html = await res.text();
   } catch {
-    showToast('HTML 문서를 불러오지 못해 PDF로 저장할 수 없습니다.', { error: true });
+    showToast('Could not load the HTML document, so it cannot be saved as PDF.', { error: true });
     return;
   }
   removePrintFrame();
   const frame = document.createElement('iframe');
   frame.id = PRINT_FRAME_ID;
-  frame.title = 'PDF 저장용 문서';
+  frame.title = 'Document for PDF export';
   frame.setAttribute('aria-hidden', 'true');
   frame.tabIndex = -1;
-  // allow-same-origin 없이 열어 문서 스크립트를 뷰어와 격리하고, 인쇄 호출만 허용한다.
+  // Open without allow-same-origin to isolate document scripts from the viewer, allowing only the print call.
   frame.setAttribute('sandbox', 'allow-scripts allow-modals');
   frame.srcdoc = buildPrintableHtml(html, new URL(url, window.location.href).href, name);
   document.body.appendChild(frame);
   printFrame = frame;
   printStarted = false;
-  // 인쇄 대화상자는 오래 열려 있을 수 있으므로, 시작 신호가 끝내 오지 않은 경우만 실패로 처리한다.
+  // The print dialog may stay open for a long time, so only treat it as failed if the start signal never arrives.
   printTimer = setTimeout(() => {
     if (printFrame !== frame || printStarted) return;
     removePrintFrame();
-    showToast('PDF 인쇄를 시작하지 못했습니다.', { error: true });
+    showToast('Failed to start PDF printing.', { error: true });
   }, PRINT_START_TIMEOUT_MS);
 }
 

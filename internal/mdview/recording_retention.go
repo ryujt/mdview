@@ -22,11 +22,11 @@ const (
 
 var recordingDirPattern = regexp.MustCompile(`^rec-[0-9]{8}-[0-9]{6}(-[0-9]+)?$`)
 
-// recordingBaseDir는 작업 폴더와 무관한 사용자별 앱 데이터 위치다.
+// recordingBaseDir is the per-user app data location, independent of the working folder.
 func recordingBaseDir() (string, error) {
 	base, err := os.UserConfigDir()
 	if err != nil {
-		return "", fmt.Errorf("녹화 저장 위치를 찾을 수 없습니다: %w", err)
+		return "", fmt.Errorf("cannot determine recording storage location: %w", err)
 	}
 	return filepath.Join(base, configDirName), nil
 }
@@ -47,10 +47,10 @@ func (s *Server) runRecordingRetention(ctx context.Context, interval time.Durati
 func (s *Server) pruneRecordings(now time.Time) {
 	base, err := recordingBaseDir()
 	if err != nil {
-		logging.Warn("[Recording] 만료 정리 실패: %v", err)
+		logging.Warn("[Recording] expired recording cleanup failed: %v", err)
 		return
 	}
-	// 후처리 중인 녹화는 정리하지 않는다. 상태 갱신도 같은 락을 사용한다.
+	// Recordings still being post-processed are not pruned. State updates use the same lock.
 	s.jobMu.Lock()
 	defer s.jobMu.Unlock()
 	active := make(map[string]bool)
@@ -59,15 +59,15 @@ func (s *Server) pruneRecordings(now time.Time) {
 	}
 	removed, err := pruneExpiredRecordings(base, now, active)
 	if err != nil {
-		logging.Warn("[Recording] 만료 정리 실패: %v", err)
+		logging.Warn("[Recording] expired recording cleanup failed: %v", err)
 	}
 	if removed > 0 {
-		logging.Info("[Recording] 7일 지난 녹화 %d개 삭제", removed)
+		logging.Info("[Recording] deleted %d recordings older than 7 days", removed)
 	}
 }
 
-// pruneExpiredRecordings는 전용 저장소의 녹화만 savedAt 기준으로 정리한다.
-// 앱을 쓰지 않은 동안 만료된 자료는 다음 실행 시 삭제한다.
+// pruneExpiredRecordings prunes only recordings in the dedicated store, based on savedAt.
+// Recordings that expired while the app was not in use are deleted on the next run.
 func pruneExpiredRecordings(base string, now time.Time, active map[string]bool) (int, error) {
 	if now.IsZero() {
 		return 0, errors.New("recording retention requires a nonzero current time")
@@ -107,7 +107,7 @@ func pruneExpiredRecordings(base string, now time.Time, active map[string]bool) 
 		}
 		savedAt, err := recordingSavedAt(owned)
 		owned.Close()
-		// 식별할 수 없는 디렉토리나 불완전한 저장은 임의로 삭제하지 않는다.
+		// Never delete unidentifiable directories or incomplete saves.
 		if err != nil || savedAt.IsZero() || savedAt.After(cutoff) {
 			continue
 		}

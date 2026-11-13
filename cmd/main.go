@@ -21,36 +21,36 @@ const (
        mdview --version
        mdview transcribe [-model NAME] [-lang CODE] <recording-dir>
 
-  인자 없음:  현재 디렉토리를 사이드바로 탐색한다.
-  파일 경로:  해당 파일만 실시간 감시한다 (마크다운은 렌더링, 소스코드·설정 파일은 코드뷰어).
-  -port N:    리슨 포트 (기본 8642, 사용 중이면 이후 포트를 순차 시도, 0이면 임의 포트).
-              포트가 고정되어야 브라우저가 localhost:포트 origin의 마이크 권한을 기억한다.
-  transcribe: 녹화 디렉토리(mdview-recordings/rec-*)의 오디오를 OpenAI whisper-1 API로 전사하고
-              세그먼트 타임스탬프와 이벤트 타임라인을 병합해 transcript.json을 생성한다.
-              API 키: ~/.config/mdview/config.json 또는 OPENAI_API_KEY 환경변수.
-              -model large-v3 를 주면 로컬 whisper CLI(openai/whisper-large-v3)로 실행한다.
-              전사 여부와 무관하게 AI에게 붙여 넣을 prompt.txt를 생성한다.`
+  no args:    browse the current directory in the sidebar.
+  file path:  live-watch only that file (Markdown is rendered; source and config files open in the code viewer).
+  -port N:    listen port (default 8642; if in use, the following ports are tried in order; 0 picks a random port).
+              A fixed port lets the browser remember microphone permission for the localhost:port origin.
+  transcribe: transcribe the audio in a recording directory (mdview-recordings/rec-*) with the OpenAI whisper-1 API
+              and merge segment timestamps with the event timeline into transcript.json.
+              API key: ~/.config/mdview/config.json or the OPENAI_API_KEY environment variable.
+              With -model large-v3, the local whisper CLI (openai/whisper-large-v3) is used instead.
+              A prompt.txt to paste into an AI is generated whether or not transcription runs.`
 
 	transcribeUsage = "Usage: mdview transcribe [-model NAME] [-lang CODE] <recording-dir>"
 
-	// 기본 리슨 포트. 매 실행 origin이 바뀌면 브라우저가 마이크 권한을 기억하지
-	// 못하므로 고정 포트를 기본값으로 사용한다.
+	// Default listen port. If the origin changed on every run, the browser could not
+	// remember microphone permission, so a fixed port is the default.
 	defaultPort = 8642
-	// 기본 포트 사용 중일 때 순차적으로 시도할 포트 수
+	// Number of ports to try in order when the default port is in use
 	portTries = 20
-	// 종료 시 진행 중인 HTTP 요청(업로드 등)을 기다리는 상한
+	// Upper bound for waiting on in-flight HTTP requests (uploads, etc.) at shutdown
 	httpShutdownTimeout = 2 * time.Second
 )
 
-// 배포 시 -ldflags로 설정하며, 소스에서 직접 실행하면 dev로 표시한다.
+// Set via -ldflags for releases; shows dev when run directly from source.
 var (
 	version   = "dev"
 	commit    = "unknown"
 	buildDate = "unknown"
 )
 
-// main은 시스템 전체의 Orchestrator이다.
-// CLI 인자에 따라 실행 모드를 결정하고, 각 Worker/Gateway를 와이어링한다.
+// main is the Orchestrator for the whole system.
+// It picks the run mode from the CLI args and wires up each Worker/Gateway.
 func main() {
 	args := os.Args[1:]
 
@@ -60,8 +60,8 @@ func main() {
 	}
 
 	fs := flag.NewFlagSet("mdview", flag.ExitOnError)
-	port := fs.Int("port", defaultPort, "리슨 포트 (사용 중이면 순차 시도, 0이면 임의 포트)")
-	showVersion := fs.Bool("version", false, "버전 정보 출력")
+	port := fs.Int("port", defaultPort, "listen port (tries the next ports if in use; 0 for a random port)")
+	showVersion := fs.Bool("version", false, "print version information")
 	fs.Usage = func() { fmt.Fprintln(os.Stderr, usage) }
 	if err := fs.Parse(args); err != nil {
 		os.Exit(1)
@@ -85,12 +85,12 @@ func main() {
 	runFolderMode(*port)
 }
 
-// runTranscribe는 녹화 전사 서브커맨드를 실행한다. 전사를 생략해야 하는 경우에도 prompt.txt는 만든다.
+// runTranscribe runs the recording transcription subcommand. It still writes prompt.txt when transcription must be skipped.
 func runTranscribe(args []string) {
 	fs := flag.NewFlagSet("transcribe", flag.ExitOnError)
 	model := fs.String("model", "",
-		"전사 모델 (기본: 저장된 설정 또는 whisper-1, large-v3 등은 로컬 whisper CLI)")
-	lang := fs.String("lang", "", "발화 언어 코드 (예: ko). 비우면 자동 감지")
+		"transcription model (default: saved setting or whisper-1; large-v3 etc. use the local whisper CLI)")
+	lang := fs.String("lang", "", "spoken language code (e.g. en). Leave empty to auto-detect")
 	if err := fs.Parse(args); err != nil {
 		os.Exit(1)
 	}
@@ -101,7 +101,7 @@ func runTranscribe(args []string) {
 	if *model == "" {
 		selected, err := mdview.ResolveTranscribeModel()
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "전사 설정을 읽을 수 없습니다")
+			fmt.Fprintln(os.Stderr, "cannot read transcription settings")
 			os.Exit(1)
 		}
 		*model = selected
@@ -109,32 +109,32 @@ func runTranscribe(args []string) {
 	dir := fs.Arg(0)
 
 	logging.StartSession()
-	logging.LogProcessEvent("start", "start", "전사 시작: "+dir, nil)
+	logging.LogProcessEvent("start", "start", "transcription started: "+dir, nil)
 	skipped := false
 	if reason := mdview.TranscribeSkipReason(dir, *model); reason != "" {
 		skipped = true
-		fmt.Fprintf(os.Stderr, "전사를 생략합니다 (%s) — 조작 기록만으로 프롬프트를 만듭니다.\n", reason)
-		logging.Warn("[Transcribe] 전사 생략: %s", reason)
+		fmt.Fprintf(os.Stderr, "Skipping transcription (%s) — building the prompt from the interaction log only.\n", reason)
+		logging.Warn("[Transcribe] transcription skipped: %s", reason)
 	} else if _, err := mdview.TranscribeRecording(dir, *model, *lang); err != nil {
-		exitTranscribe("전사 실패", err)
+		exitTranscribe("transcription failed", err)
 	}
 	job := mdview.NewPipeline().RunAfterTranscribe(dir)
 	if job.State == mdview.TranscribeStateError {
-		exitTranscribe("프롬프트 생성 실패", errors.New(job.Error))
+		exitTranscribe("prompt generation failed", errors.New(job.Error))
 	}
-	endLabel := "전사 완료: "
+	endLabel := "transcription complete: "
 	if skipped {
-		endLabel = "프롬프트 생성 완료: "
+		endLabel = "prompt generated: "
 	}
 	logging.LogProcessEvent("end", "end", endLabel+filepath.Base(dir), nil)
 	logging.EndSession()
 	if job.Transcript != "" {
-		fmt.Printf("전사 문서 생성: %s\n", job.Transcript)
+		fmt.Printf("Transcript written: %s\n", job.Transcript)
 	}
-	fmt.Printf("프롬프트 생성: %s\n", job.Prompt)
+	fmt.Printf("Prompt written: %s\n", job.Prompt)
 }
 
-// exitTranscribe는 전사 서브커맨드를 에러 한 번만 출력하고 종료한다.
+// exitTranscribe prints the transcription subcommand error once and exits.
 func exitTranscribe(label string, err error) {
 	logging.Error("[Transcribe] %s: %v", label, err)
 	logging.LogProcessEvent("end", "error", label, nil)
@@ -143,7 +143,7 @@ func exitTranscribe(label string, err error) {
 	os.Exit(1)
 }
 
-// runFileMode는 단일 파일 감시 모드를 실행한다.
+// runFileMode runs single-file watch mode.
 func runFileMode(filePath string, port int) {
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
 		fmt.Fprintf(os.Stderr, "file not found: %s\n", filePath)
@@ -158,13 +158,13 @@ func runFileMode(filePath string, port int) {
 	defer logging.EndSession()
 
 	listener, url := mustListen(port)
-	logging.Info("[Main] file 모드 시작: %s (%s)", absPath, url)
+	logging.Info("[Main] file mode started: %s (%s)", absPath, url)
 	statePath := logging.LogStateSnapshot("startup", map[string]any{
 		"mode": "file", "file": absPath, "url": url,
 	})
-	logging.LogProcessEvent("start", "start", "mdview 시작: file 모드 "+filepath.Base(absPath),
+	logging.LogProcessEvent("start", "start", "mdview started: file mode "+filepath.Base(absPath),
 		&logging.EventOpts{ArtifactPath: statePath})
-	logging.LogProcessEvent("execution", "step_ok", "리슨: "+url, nil)
+	logging.LogProcessEvent("execution", "step_ok", "listening: "+url, nil)
 
 	hub := mdview.NewHub()
 	go hub.Run()
@@ -175,27 +175,27 @@ func runFileMode(filePath string, port int) {
 		os.Exit(1)
 	}
 	go server.Start(listener)
-	logging.LogProcessEvent("execution", "step_ok", "HTTP/WS 서버 기동", nil)
+	logging.LogProcessEvent("execution", "step_ok", "HTTP/WS server started", nil)
 
-	// Watcher Worker → Orchestrator: 파일 변경 시 hub로 브로드캐스트.
-	// PDF는 바이너리라 내용 없이 변경 신호만 보내고 클라이언트가 URL로 다시 읽는다.
+	// Watcher Worker → Orchestrator: broadcast to the hub on file change.
+	// PDFs are binary, so only a change signal is sent and the client re-reads it by URL.
 	go mdview.StartFileWatcher(absPath, func(changedAbs string, content []byte) {
 		if mdview.IsPDFPath(changedAbs) {
 			content = []byte{}
 		}
-		logging.Info("[Main] 파일 변경 브로드캐스트: %s (%d bytes)", changedAbs, len(content))
+		logging.Info("[Main] broadcasting file change: %s (%d bytes)", changedAbs, len(content))
 		hub.Broadcast(content)
 	})
 
 	fmt.Printf("Serving %s at %s\n", absPath, url)
 	mdview.OpenBrowser(url)
-	logging.LogProcessEvent("execution", "step_ok", "브라우저 오픈", nil)
+	logging.LogProcessEvent("execution", "step_ok", "browser opened", nil)
 	waitForSignal()
-	logging.LogProcessEvent("end", "end", "종료 시그널 수신", nil)
+	logging.LogProcessEvent("end", "end", "shutdown signal received", nil)
 	shutdown(server)
 }
 
-// runFolderMode는 현재 디렉토리 탐색 모드를 실행한다.
+// runFolderMode runs current-directory browse mode.
 func runFolderMode(port int) {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -207,13 +207,13 @@ func runFolderMode(port int) {
 	defer logging.EndSession()
 
 	listener, url := mustListen(port)
-	logging.Info("[Main] folder 모드 시작: %s (%s)", cwd, url)
+	logging.Info("[Main] folder mode started: %s (%s)", cwd, url)
 	statePath := logging.LogStateSnapshot("startup", map[string]any{
 		"mode": "folder", "root": cwd, "url": url,
 	})
-	logging.LogProcessEvent("start", "start", "mdview 시작: folder 모드",
+	logging.LogProcessEvent("start", "start", "mdview started: folder mode",
 		&logging.EventOpts{ArtifactPath: statePath})
-	logging.LogProcessEvent("execution", "step_ok", "리슨: "+url, nil)
+	logging.LogProcessEvent("execution", "step_ok", "listening: "+url, nil)
 
 	hub := mdview.NewHub()
 	go hub.Run()
@@ -224,11 +224,11 @@ func runFolderMode(port int) {
 		os.Exit(1)
 	}
 	go server.Start(listener)
-	logging.LogProcessEvent("execution", "step_ok", "HTTP/WS 서버 기동", nil)
+	logging.LogProcessEvent("execution", "step_ok", "HTTP/WS server started", nil)
 
-	// Watcher Worker → Orchestrator: 활성 파일 하나만 감시하고 변경 시 브로드캐스트.
-	// 활성 파일이 바뀌면 hub 콜백으로 감시 대상을 교체한다(트리 전체를 감시하지 않음).
-	// PDF는 바이너리라 내용 없이 변경 신호만 보내고 클라이언트가 URL로 다시 읽는다.
+	// Watcher Worker → Orchestrator: watch only the active file and broadcast on change.
+	// When the active file changes, the hub callback swaps the watch target (the whole tree is not watched).
+	// PDFs are binary, so only a change signal is sent and the client re-reads it by URL.
 	watcher := mdview.NewFolderWatcher(func(changedAbs string, content []byte) {
 		if mdview.IsPDFPath(changedAbs) {
 			content = []byte{}
@@ -240,7 +240,7 @@ func runFolderMode(port int) {
 		if err != nil {
 			return
 		}
-		logging.Info("[Main] 파일 변경 브로드캐스트: %s (%d bytes)", toRelSlash(cwd, changedAbs), len(content))
+		logging.Info("[Main] broadcasting file change: %s (%d bytes)", toRelSlash(cwd, changedAbs), len(content))
 		hub.Broadcast(msg)
 	})
 	if watcher != nil {
@@ -250,14 +250,14 @@ func runFolderMode(port int) {
 
 	fmt.Printf("Serving %s at %s\n", cwd, url)
 	mdview.OpenBrowser(url)
-	logging.LogProcessEvent("execution", "step_ok", "브라우저 오픈", nil)
+	logging.LogProcessEvent("execution", "step_ok", "browser opened", nil)
 	waitForSignal()
-	logging.LogProcessEvent("end", "end", "종료 시그널 수신", nil)
+	logging.LogProcessEvent("end", "end", "shutdown signal received", nil)
 	shutdown(server)
 }
 
-// mustListen은 지정 포트부터 순차 시도해 리스너를 연다.
-// preferred가 0이면 임의 포트를 사용한다 (마이크 권한이 기억되지 않을 수 있음).
+// mustListen opens a listener, trying ports in order starting from the given one.
+// If preferred is 0, a random port is used (microphone permission may not be remembered).
 func mustListen(preferred int) (net.Listener, string) {
 	if preferred == 0 {
 		return listenRandom()
@@ -266,13 +266,13 @@ func mustListen(preferred int) (net.Listener, string) {
 		listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", p))
 		if err == nil {
 			if p != preferred {
-				fmt.Printf("포트 %d 사용 중 → %d 사용\n", preferred, p)
+				fmt.Printf("Port %d in use → using %d\n", preferred, p)
 			}
 			return listener, fmt.Sprintf("http://localhost:%d", p)
 		}
 	}
 	fmt.Fprintf(os.Stderr,
-		"경고: 포트 %d~%d 모두 사용 중이라 임의 포트로 실행합니다. origin이 바뀌어 브라우저가 마이크 권한을 기억하지 못할 수 있습니다.\n",
+		"Warning: ports %d-%d are all in use; falling back to a random port. The origin will change, so the browser may not remember microphone permission.\n",
 		preferred, preferred+portTries-1)
 	return listenRandom()
 }
@@ -287,17 +287,17 @@ func listenRandom() (net.Listener, string) {
 	return listener, fmt.Sprintf("http://localhost:%d", port)
 }
 
-// waitForSignal은 Ctrl+C(SIGINT)/SIGTERM을 기다린다.
-// 첫 시그널에 종료 절차를 시작하고, 두 번째 시그널은 즉시 강제 종료한다
-// (종료 절차가 어떤 이유로든 지연될 때 Ctrl+C 연타로 확실히 빠져나올 수 있게).
+// waitForSignal waits for Ctrl+C (SIGINT)/SIGTERM.
+// The first signal starts shutdown; a second one forces an immediate exit
+// (so repeated Ctrl+C always gets out if shutdown stalls for any reason).
 func waitForSignal() {
 	quit := make(chan os.Signal, 2)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	sig := <-quit
-	fmt.Printf("\n%s 수신 — 종료합니다\n", sig)
+	fmt.Printf("\n%s received — shutting down\n", sig)
 	go func() {
 		<-quit
-		fmt.Fprintln(os.Stderr, "강제 종료")
+		fmt.Fprintln(os.Stderr, "forced exit")
 		os.Exit(1)
 	}()
 }
@@ -310,13 +310,13 @@ func toRelSlash(root, abs string) string {
 	return filepath.ToSlash(rel)
 }
 
-// shutdown은 HTTP 서버를 먼저 닫아 새 업로드 요청을 막은 뒤 진행 중인 후처리(전사·프롬프트)를 기다린다.
-// HTTP를 먼저 닫아야 WaitPipelines 이후에 새 후처리가 시작되지 않는다.
-// 녹음 중이던 오디오는 브라우저 메모리에만 있으므로 여기서 구할 수 없다.
+// shutdown closes the HTTP server first to block new uploads, then waits for in-flight post-processing (transcription, prompt).
+// Closing HTTP first ensures no new post-processing starts after WaitPipelines.
+// Audio still being recorded lives only in browser memory, so it cannot be saved here.
 func shutdown(server *mdview.Server) {
 	server.StopHTTP(httpShutdownTimeout)
 	if server.PipelinesPending() {
-		fmt.Println("후처리를 마무리하는 중입니다… (전사·프롬프트 생성)")
+		fmt.Println("Finishing post-processing… (transcription, prompt generation)")
 	}
 	server.WaitPipelines()
 }

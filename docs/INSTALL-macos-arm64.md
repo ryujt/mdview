@@ -1,123 +1,123 @@
-# mdview 설치·사용 가이드 — Apple Silicon Mac
+# mdview Installation and Usage Guide — Apple Silicon Mac
 
-## 1. 설치 전 확인
+## 1. Before you install
 
-- **지원 기기:** Apple Silicon Mac(M1·M2·M3·M4 및 이후 Apple Silicon 모델).
-- **운영체제:** macOS 13 Ventura 이상.
-- **배포 파일:** `mdview-1.0.4-macos-arm64.pkg`.
-- **인터넷:** 일부 다이어그램·코드 강조·PDF 리소스를 CDN에서 불러오므로 문서 렌더링에는 인터넷 연결이 필요합니다. 오프라인 사용은 보장하지 않습니다.
-- **별도 설치 불필요:** Go, Homebrew, Node.js, Xcode는 필요하지 않습니다.
+- **Supported hardware:** Apple Silicon Macs (M1, M2, M3, M4, and later Apple Silicon models).
+- **Operating system:** macOS 13 Ventura or later.
+- **Release file:** `mdview-1.0.4-macos-arm64.pkg`.
+- **Internet:** Some diagram, code highlighting, and PDF resources are loaded from CDNs, so rendering documents requires an internet connection. Offline use is not guaranteed.
+- **Nothing else to install:** Go, Homebrew, Node.js, and Xcode are not required.
 
-이 버전은 Mac App Store 외부에서 배포하는 앱입니다. 앱에는 `Developer ID Application: Mediawave (23B9Q752EU)`, 설치 프로그램에는 `Developer ID Installer: Mediawave (23B9Q752EU)` 서명과 Apple 공증 티켓이 적용됩니다. 인증서·개인 키·개발자의 API 키는 배포 파일에 포함하지 않습니다.
+This version is distributed outside the Mac App Store. The app is signed with `Developer ID Application: Mediawave (23B9Q752EU)` and the installer with `Developer ID Installer: Mediawave (23B9Q752EU)`, and both carry an Apple notarization ticket. Certificates, private keys, and the developer's API keys are not included in the release files.
 
-## 2. 설치하기 — 터미널 없이
+## 2. Installing — no Terminal needed
 
-1. `mdview-1.0.4-macos-arm64.pkg`를 더블클릭합니다.
-2. macOS 설치 프로그램에서 **계속 → 설치**를 누릅니다.
-3. 요청하면 Mac 관리자 인증을 완료합니다.
-4. 설치가 완료되면 **닫기**를 누릅니다.
+1. Double-click `mdview-1.0.4-macos-arm64.pkg`.
+2. In the macOS Installer, click **Continue → Install**.
+3. If prompted, complete Mac administrator authentication.
+4. When installation finishes, click **Close**.
 
-앱과 CLI가 함께 설치됩니다. 이 Mac의 다른 사용자 계정에서도 사용할 수 있습니다.
+The app and the CLI are installed together, and they are available to other user accounts on this Mac as well.
 
-| 항목 | 설치 위치 | 실행 방법 |
+| Item | Location | How to run |
 | --- | --- | --- |
-| 데스크톱 앱 | `/Applications/mdview.app` | 응용 프로그램 → mdview |
-| 터미널 명령 | `/usr/local/bin/mdview` | 터미널에서 `mdview` 입력 |
+| Desktop app | `/Applications/mdview.app` | Applications → mdview |
+| Terminal command | `/usr/local/bin/mdview` | Type `mdview` in Terminal |
 
-CLI 명령은 앱 내부의 실행 파일로 자동 연결됩니다. 표준 macOS 터미널에서는 PATH 수정, 수동 링크 생성, 앱 최초 실행이 필요하지 않습니다. 앱과 CLI의 설정·녹음은 사용자 계정별로 분리됩니다.
+The CLI command is linked automatically to the executable inside the app. In the standard macOS Terminal, you don't need to edit PATH, create links manually, or launch the app first. Settings and recordings for the app and the CLI are kept separately for each user account.
 
-기존 1.0.0 DMG는 앱만 복사하는 방식이라 CLI가 자동 등록되지 않았습니다. 다른 사용자에게 전달할 때에는 **1.0.1 이상의 PKG 설치 파일**을 사용하세요.
+The earlier 1.0.0 DMG only copied the app, so the CLI was not registered automatically. When sharing mdview with others, use the **1.0.1 or later PKG installer**.
 
-## 3. 첫 문서 열기
+## 3. Opening your first document
 
-1. 앱에서 **폴더 열기…**를 눌러 프로젝트나 문서 폴더를 선택합니다. 단일 문서는 **파일 열기…**로 선택합니다.
-2. 기본 브라우저가 자동으로 열립니다. 폴더 모드에서는 왼쪽 목록에서 문서를 선택합니다.
-3. 파일을 수정하면 브라우저에 실시간으로 반영됩니다.
+1. In the app, click **Open Folder…** and choose a project or documents folder. To open a single document, use **Open File…**.
+2. Your default browser opens automatically. In folder mode, select a document from the list on the left.
+3. When you edit the file, the change shows up in the browser live.
 
-HTML(`.html`, `.htm`) 파일은 CSS·스크립트·이미지가 적용된 미리보기로 표시됩니다. HTML은 뷰어와 격리된 영역에서 열리며 파일 변경도 자동 반영됩니다.
+HTML files (`.html`, `.htm`) are shown as a preview with their CSS, scripts, and images applied. HTML opens in an area isolated from the viewer, and file changes are reflected automatically.
 
-앱 창에 파일·폴더 하나를 끌어 놓아도 열 수 있습니다. Finder의 문서에서 **우클릭 → 다음으로 열기 → mdview**도 사용할 수 있습니다. 기본 문서 연결 앱은 설치 과정에서 강제로 변경하지 않습니다.
+You can also drag a single file or folder onto the app window to open it, or use **right-click → Open With → mdview** on a document in Finder. The installer does not forcibly change your default app for any document type.
 
-- 브라우저 탭을 닫았다면 앱의 **브라우저 다시 열기**를 누릅니다.
-- 다른 문서를 열려면 먼저 **뷰어 중지**를 누른 뒤 다시 파일·폴더를 선택합니다.
-- 사용을 마치면 **뷰어 중지** 또는 **⌘Q**로 종료합니다. 브라우저 탭만 닫으면 문서 서버는 계속 실행됩니다.
-- 앱 창을 닫아도 앱과 문서 서버가 종료됩니다.
+- If you closed the browser tab, click **Reopen Browser** in the app.
+- To open another document, first click **Stop Viewer**, then choose a file or folder again.
+- When you're done, quit with **Stop Viewer** or **⌘Q**. Closing only the browser tab leaves the document server running.
+- Closing the app window also quits the app and the document server.
 
-문서 서버는 이 Mac의 로컬 주소에서만 접속할 수 있습니다. 기본 주소는 `http://localhost:8642`이며, 사용 중이면 앱 창에 표시되는 다른 포트를 사용합니다.
+The document server is reachable only from local addresses on this Mac. The default address is `http://localhost:8642`; if that port is in use, a different port is used and shown in the app window.
 
-### 마크다운 ZIP으로 저장하기
+### Saving as a Markdown ZIP
 
-마크다운 문서를 연 뒤 상단의 **내보내기 → 마크다운 ZIP으로 저장…**을 누릅니다. 현재 문서 전체를 담은 ZIP이 다운로드됩니다.
+Open a Markdown document and click **Export → Save as Markdown ZIP…** at the top. A ZIP containing the entire current document is downloaded.
 
-- `document.md`: 네비게이션(`navigation`)·상태도(`state`)를 Mermaid 코드로 바꾼 문서입니다. 기존 Mermaid 코드는 그대로 유지합니다.
-- `images/`: 잡플로우(`jobflow`) PNG가 저장되며 `document.md`에서 상대 경로로 참조합니다.
+- `document.md`: the document with navigation (`navigation`) and state (`state`) diagrams converted to Mermaid code. Existing Mermaid code is kept as is.
+- `images/`: job flow (`jobflow`) PNGs, referenced from `document.md` via relative paths.
 
-압축을 풀고 `document.md`와 `images/`를 같은 폴더 구조로 유지하세요. `document.md`를 Mermaid 지원 Markdown 뷰어에서 열면 변환한 다이어그램과 잡플로우 이미지를 함께 볼 수 있습니다. 원본 문서 파일은 수정하지 않습니다.
+Extract the ZIP and keep `document.md` and `images/` in the same folder structure. Open `document.md` in any Markdown viewer that supports Mermaid to see the converted diagrams and the job flow images together. Your original document file is not modified.
 
-## 4. 녹음·전사 사용하기
+## 4. Using recording and transcription
 
-### 녹음
+### Recording
 
-1. 브라우저 상단의 입력 장치 목록에서 마이크를 선택합니다.
-2. 녹음 버튼을 누르고 브라우저의 마이크 사용 요청을 허용합니다.
-3. 녹음 버튼을 다시 눌러 저장합니다. 전사·프롬프트 처리가 끝날 때까지 기다립니다.
-4. 녹음 저장과 후처리가 끝난 뒤 앱을 중지하거나 종료합니다.
+1. Choose a microphone from the input device list at the top of the browser.
+2. Press the record button and allow the browser's microphone request.
+3. Press the record button again to save. Wait until transcription and prompt processing finish.
+4. Stop or quit the app only after the recording has been saved and post-processing has finished.
 
-**저장 위치:** 앱과 CLI 모두 작업 폴더와 무관하게 `~/Library/Application Support/mdview/mdview-recordings/rec-<시각>/`에 저장합니다.
+**Save location:** Both the app and the CLI save to `~/Library/Application Support/mdview/mdview-recordings/rec-<timestamp>/`, regardless of the working folder.
 
-저장 후 7일이 지난 녹화는 자동 삭제합니다. 보존할 녹화는 다른 폴더에 복사하세요. 전사 완료 시 `transcript.json` 전체 내용을 클립보드에 자동 복사하고 시스템 알림으로 알려줍니다.
+Recordings are deleted automatically 7 days after they are saved. Copy any recordings you want to keep to another folder. When transcription finishes, the full contents of `transcript.json` are copied to the clipboard automatically and a system notification lets you know.
 
-`audio.webm` 등 오디오 파일, `events.json`, `prompt.txt`가 저장됩니다. API 키가 없더라도 녹음과 조작 기록 저장 및 조작 기록 기반 `prompt.txt` 생성은 가능합니다.
+The audio file (such as `audio.webm`), `events.json`, and `prompt.txt` are saved. Even without an API key, you can record, save the action log, and generate a `prompt.txt` based on the action log.
 
-녹음 중 앱을 종료하면 아직 브라우저 메모리에 있는 녹음은 저장되지 않습니다. 반드시 브라우저에서 먼저 녹음을 저장하세요. 이미 시작한 전사·프롬프트 후처리는 앱이 마무리를 기다리며, 이때 종료가 잠시 지연될 수 있습니다.
+If you quit the app while recording, audio still held in the browser's memory is not saved. Always save the recording in the browser first. Transcription and prompt post-processing that have already started are allowed to finish before the app quits, so quitting may take a moment.
 
-### 음성 전사 설정 — 선택 사항
+### Speech transcription setup — optional
 
-음성을 글로 변환하려면 본인의 OpenAI API 키를 설정합니다.
+To convert speech to text, set your own OpenAI API key.
 
-1. mdview 웹 화면 **왼쪽 하단의 톱니바퀴(설정)**를 누릅니다. 파일 모드와 폴더 모드 모두 같은 위치에 있습니다.
-2. **OpenAI API 키**에 본인의 키를 입력합니다.
-3. **전사 모델**을 선택합니다. 현재 기본값은 **Whisper 1 (`whisper-1`)**입니다.
-4. **저장**을 누릅니다. 앱을 재시작하지 않아도 다음 녹음의 전사부터 적용됩니다.
+1. Click the **gear icon (Settings) at the bottom left** of the mdview web UI. It's in the same place in both file mode and folder mode.
+2. Enter your key in **OpenAI API key**.
+3. Choose a **Transcription model**. The current default is **Whisper 1 (`whisper-1`)**.
+4. Click **Save**. It takes effect from the next recording's transcription, without restarting the app.
 
-저장된 키는 다시 화면으로 보내지 않으며 ‘설정됨’으로만 표시합니다. 키 입력란을 비워 두고 저장하면 기존 키를 유지합니다. 키를 바꾸려면 새 키를 입력하고 저장하고, 삭제하려면 **저장된 키 삭제 → 저장**을 누릅니다. 닫기나 Esc는 저장하지 않은 변경을 취소합니다.
+A saved key is never sent back to the page; it is only shown as "Set". If you leave the key field empty and save, the existing key is kept. To change the key, enter a new one and save; to delete it, click **Delete saved key → Save**. Close or Esc discards unsaved changes.
 
-설정은 사용자 계정의 `~/.config/mdview/config.json`에 저장되며 API 키 파일은 해당 사용자만 읽고 쓸 수 있는 권한(0600)으로 저장됩니다. 브라우저 저장소에는 키를 보관하지 않습니다. 같은 계정에서 실행하는 데스크톱 앱과 CLI가 설정을 공유합니다.
+Settings are stored in `~/.config/mdview/config.json` in your user account, and the API key file is saved with permissions that allow only that user to read and write it (0600). The key is never kept in browser storage. The desktop app and the CLI share settings when run under the same account.
 
-| 모델 | 전사 결과 |
+| Model | Transcription result |
 | --- | --- |
-| Whisper 1 (`whisper-1`, 기본) | 발화별 시간 정보를 문서 조작과 함께 타임라인에 기록 |
-| GPT Transcribe (`gpt-transcribe`) | 전체 전사문 저장, 발화별 시간 정보 없음 |
-| GPT-4o Transcribe (`gpt-4o-transcribe`) | 전체 전사문 저장, 발화별 시간 정보 없음 |
-| GPT-4o mini Transcribe (`gpt-4o-mini-transcribe`) | 전체 전사문 저장, 발화별 시간 정보 없음 |
+| Whisper 1 (`whisper-1`, default) | Per-utterance timing recorded on the timeline together with document actions |
+| GPT Transcribe (`gpt-transcribe`) | Full transcript saved, no per-utterance timing |
+| GPT-4o Transcribe (`gpt-4o-transcribe`) | Full transcript saved, no per-utterance timing |
+| GPT-4o mini Transcribe (`gpt-4o-mini-transcribe`) | Full transcript saved, no per-utterance timing |
 
-시간 정보가 없는 모델의 음성 전사는 `prompt.txt`의 별도 ‘음성 전사 (시간 정보 없음)’ 영역과 `transcript.json`의 `untimedSpeech`에 저장합니다. 문서 조작 시간은 그대로 남습니다. 모델별 API 응답 형식은 [OpenAI 공식 전사 문서](https://developers.openai.com/api/reference/resources/audio/subresources/transcriptions/methods/create)를 따릅니다.
+For models without timing information, the transcript is saved in a separate "Speech Transcript (No Timing)" section of `prompt.txt` and in `untimedSpeech` in `transcript.json`. Document action timestamps are kept as is. The API response format for each model follows the [official OpenAI transcription documentation](https://developers.openai.com/api/reference/resources/audio/subresources/transcriptions/methods/create).
 
-환경 변수 `OPENAI_API_KEY`를 설정한 CLI에서는 환경 변수의 키가 우선합니다. 설정 창에도 이를 안내합니다. Finder에서 실행한 앱에는 터미널 환경 변수가 보통 전달되지 않으므로 웹 설정에서 저장하는 편이 간단합니다.
+When the `OPENAI_API_KEY` environment variable is set for the CLI, the key from the environment variable takes precedence; the settings dialog points this out as well. Apps launched from Finder usually don't receive Terminal environment variables, so saving the key in the web settings is simpler.
 
-음성 전사를 사용할 때 녹음 오디오는 OpenAI API로 전송되며 본인의 계정에 API 사용 요금이 부과됩니다. 키가 없거나 업로드 가능한 크기를 초과하면 전사를 생략하고 조작 기록만으로 프롬프트를 만듭니다. 키 없이도 문서 열람과 녹음은 사용할 수 있습니다.
+When you use speech transcription, the recorded audio is sent to the OpenAI API and API usage fees are charged to your account. If there's no key or the audio exceeds the upload size limit, transcription is skipped and the prompt is built from the action log alone. You can still view documents and record without a key.
 
-## 5. 터미널에서 바로 사용하기
+## 5. Using it directly from Terminal
 
-PKG 설치가 끝나면 터미널에서 바로 실행할 수 있습니다. 앱을 먼저 실행할 필요는 없습니다.
+Once the PKG installation finishes, you can run mdview from Terminal right away. You don't need to launch the app first.
 
 ```bash
-# 설치·버전 확인
+# Check installation and version
 mdview --version
 
-# 현재 디렉토리 탐색
+# Browse the current directory
 mdview
 
-# 파일 열기
+# Open a file
 mdview README.md
 
-# 포트 지정
+# Specify a port
 mdview -port 9000 README.md
 ```
 
-CLI는 **Ctrl+C**로 종료합니다. CLI로 시작한 녹음도 `~/Library/Application Support/mdview/mdview-recordings/`에 저장됩니다.
+Quit the CLI with **Ctrl+C**. Recordings started from the CLI are also saved to `~/Library/Application Support/mdview/mdview-recordings/`.
 
-명령을 찾지 못한다면 새 터미널 창에서 아래를 확인합니다.
+If the command can't be found, check the following in a new Terminal window.
 
 ```bash
 rehash
@@ -125,62 +125,62 @@ command -v mdview
 mdview --version
 ```
 
-정상 설치라면 `/usr/local/bin/mdview`가 표시됩니다. `type -a mdview`에서 이전 개발용 설치(`~/.local/bin/mdview` 등)가 먼저 선택되면 이전 실행 파일을 제거한 뒤 다시 확인하세요. PATH를 직접 제한한 특수한 셸 환경에서는 `/usr/local/bin/mdview --version`으로 실행하고, 해당 셸의 PATH에 `/usr/local/bin`이 포함되었는지 확인합니다.
+On a correct installation, `/usr/local/bin/mdview` is shown. If `type -a mdview` shows an older development install (such as `~/.local/bin/mdview`) being picked first, remove the old executable and check again. In unusual shell environments where PATH has been restricted manually, run `/usr/local/bin/mdview --version` and make sure that shell's PATH includes `/usr/local/bin`.
 
-## 6. 업데이트·삭제
+## 6. Updating and uninstalling
 
-### 업데이트
+### Updating
 
-1. 브라우저에서 녹음을 저장하고 후처리 완료를 기다립니다.
-2. mdview 앱과 별도로 실행한 CLI를 모두 종료합니다.
-3. 새 PKG 설치 프로그램을 실행합니다. 앱과 CLI 연결이 함께 갱신됩니다.
+1. Save any recording in the browser and wait for post-processing to finish.
+2. Quit the mdview app and any CLI instances you started separately.
+3. Run the new PKG installer. The app and the CLI link are updated together.
 
-설정 파일과 기존 녹음은 앱 바깥에 있으므로 앱 교체 후에도 유지됩니다. 자동 업데이트 기능은 없습니다.
+Config files and existing recordings live outside the app, so they are kept when the app is replaced. There is no automatic update feature.
 
-### 삭제
+### Uninstalling
 
-1. mdview 앱과 CLI를 종료합니다.
-2. 응용 프로그램 폴더의 `mdview.app`을 휴지통으로 옮깁니다.
-3. 자동 설치된 CLI 링크를 삭제합니다. 먼저 대상을 확인하세요.
+1. Quit the mdview app and the CLI.
+2. Move `mdview.app` from the Applications folder to the Trash.
+3. Delete the automatically installed CLI link. Check its target first.
 
 ```bash
 ls -l /usr/local/bin/mdview
-# 출력이 /Applications/mdview.app/Contents/MacOS/mdview를 가리키는 링크인 경우에만:
+# Only if the output is a link pointing to /Applications/mdview.app/Contents/MacOS/mdview:
 sudo rm /usr/local/bin/mdview
 
-# 설치 기록도 제거하려면:
+# To also remove the install receipt:
 sudo pkgutil --forget camp.tools.mdview.pkg
 ```
 
-개인 설정은 `~/.config/mdview`(이전 버전의 웹 열기 기능이 만든 `chrome-profile` 포함), 녹음은 `~/Library/Application Support/mdview/mdview-recordings`에 남습니다. 이전 버전에서 저장한 녹음은 당시 열었던 폴더의 `mdview-recordings`에 남습니다. 이 데이터까지 지우려면 Finder에서 위치를 확인한 뒤 필요한 파일을 백업하고 직접 삭제하세요.
+Personal settings remain in `~/.config/mdview` (including the `chrome-profile` created by the web-opening feature in earlier versions), and recordings remain in `~/Library/Application Support/mdview/mdview-recordings`. Recordings saved by earlier versions remain in the `mdview-recordings` folder inside whichever folder was open at the time. To delete this data as well, locate it in Finder, back up any files you need, and delete them yourself.
 
-## 7. 문제가 생겼을 때
+## 7. Troubleshooting
 
-| 증상 | 확인할 내용 |
+| Symptom | What to check |
 | --- | --- |
-| Intel Mac에서 실행되지 않음 | 이 배포 파일은 Apple Silicon 전용입니다. Intel Mac은 지원하지 않습니다. |
-| macOS 버전이 지원되지 않음 | macOS 13 이상인지 ‘이 Mac에 관하여’에서 확인합니다. |
-| `zsh: command not found: mdview` | 1.0.1 이상 PKG로 설치했는지 확인합니다. 기존 DMG의 앱 복사만으로는 명령이 등록되지 않습니다. 새 터미널에서 `command -v mdview`를 확인합니다. |
-| 브라우저가 열리지 않음 | 앱에 표시된 `http://localhost:포트`로 직접 접속하거나 **브라우저 다시 열기**를 누릅니다. |
-| 문서가 빈 화면이거나 PDF·다이어그램이 표시되지 않음 | 인터넷 연결과 회사 네트워크의 `cdn.jsdelivr.net`, `cdnjs.cloudflare.com` 접근 가능 여부를 확인합니다. |
-| 마이크가 녹음되지 않음 | 브라우저의 localhost 마이크 권한과 시스템 설정 → 개인정보 보호 및 보안 → 마이크에서 해당 브라우저 권한을 확인합니다. |
-| 녹음 저장 실패 | `~/Library/Application Support/mdview`의 쓰기 권한과 디스크 여유 공간을 확인합니다. |
-| 전사만 되지 않음 | 왼쪽 하단 설정에서 본인의 API 키·전사 모델을 확인하고 API 이용 가능 상태·오디오 크기를 확인합니다. 일반 문서 열람과 녹음은 키 없이 사용할 수 있습니다. |
-| ‘확인되지 않은 개발자’·‘손상된 앱’ 경고 | `unnotarized`가 붙지 않은 정식 배포본인지 확인하고 다시 다운로드합니다. 임의로 보안 기능을 끄기보다 아래 검증으로 서명·공증을 확인합니다. |
-| 종료 중 상태가 지속됨 | 진행 중인 전사·프롬프트 처리를 기다립니다. 강제 종료하면 처리 중인 결과를 잃을 수 있습니다. |
+| Doesn't run on an Intel Mac | This release is for Apple Silicon only. Intel Macs are not supported. |
+| macOS version not supported | Check in "About This Mac" that you're running macOS 13 or later. |
+| `zsh: command not found: mdview` | Make sure you installed with the 1.0.1 or later PKG. Copying the app from the older DMG doesn't register the command. Check `command -v mdview` in a new Terminal window. |
+| Browser doesn't open | Go directly to the `http://localhost:<port>` shown in the app, or click **Reopen Browser**. |
+| Document is blank or PDFs/diagrams don't appear | Check your internet connection and whether your network (e.g. a corporate network) allows access to `cdn.jsdelivr.net` and `cdnjs.cloudflare.com`. |
+| Microphone isn't recording | Check the browser's microphone permission for localhost, and the browser's permission under System Settings → Privacy & Security → Microphone. |
+| Recording fails to save | Check write permission for `~/Library/Application Support/mdview` and free disk space. |
+| Only transcription fails | Check your API key and transcription model in the settings at the bottom left, and check your API availability and the audio size. Viewing documents and recording work without a key. |
+| "Unidentified developer" or "damaged app" warning | Make sure you have the official release (without `unnotarized` in its name) and download it again. Rather than turning off security features, verify the signature and notarization as shown below. |
+| Stuck in the "quitting" state | Wait for in-progress transcription and prompt processing to finish. Force-quitting may lose results that are still being processed. |
 
-다운로드 파일의 무결성은 배포 폴더의 `SHA256SUMS`와 대조할 수 있습니다.
+You can verify the integrity of the downloaded files against `SHA256SUMS` in the release folder.
 
 ```bash
-cd "다운로드한 배포 폴더 경로"
+cd "path/to/downloaded/release/folder"
 shasum -a 256 -c SHA256SUMS
 ```
 
-앱 서명과 Apple 공증 확인:
+Verify the app signature and Apple notarization:
 
 ```bash
 codesign --verify --deep --strict --verbose=2 /Applications/mdview.app
 spctl --assess --type execute --verbose=2 /Applications/mdview.app
 ```
 
-정상 정식 배포본은 `accepted`, `source=Notarized Developer ID`, `origin=Developer ID Application: Mediawave (23B9Q752EU)`를 표시합니다. 최초 실행 시 일반적인 다운로드 확인 창은 별도로 나타날 수 있습니다.
+A genuine official release shows `accepted`, `source=Notarized Developer ID`, and `origin=Developer ID Application: Mediawave (23B9Q752EU)`. On first launch, the usual macOS confirmation dialog for downloaded apps may still appear.

@@ -48,11 +48,11 @@ func TestBuildTreeLevelListsSingleLevel(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !level.IsDir || level.Path != "" {
-		t.Errorf("루트 노드 불일치: %+v", level)
+		t.Errorf("root node mismatch: %+v", level)
 	}
 	paths := levelPaths(level)
 
-	// 뷰어 대상 파일과 (배제 목록 외) 모든 하위 디렉토리가 1레벨로 노출된다.
+	// Viewable files and all subdirectories (except excluded ones) appear at one level.
 	for _, want := range []string{"a.md", "b.go", "notes.txt", "src/", "assets/", "empty/"} {
 		if !paths[want] {
 			t.Errorf("expected %q in level, got %v", want, paths)
@@ -63,10 +63,10 @@ func TestBuildTreeLevelListsSingleLevel(t *testing.T) {
 			t.Errorf("expected %q to be excluded, got %v", exclude, paths)
 		}
 	}
-	// 하위 디렉토리의 내용은 조회하지 않는다.
+	// Subdirectory contents are not read.
 	for _, child := range level.Children {
 		if len(child.Children) != 0 {
-			t.Errorf("1레벨 응답에 하위 내용이 포함됨: %+v", child)
+			t.Errorf("one-level response includes child contents: %+v", child)
 		}
 	}
 
@@ -75,7 +75,7 @@ func TestBuildTreeLevelListsSingleLevel(t *testing.T) {
 		t.Fatal(err)
 	}
 	if subPaths := levelPaths(sub); !subPaths["src/util.go"] {
-		t.Errorf("src 레벨에 util.go가 없음: %v", subPaths)
+		t.Errorf("util.go missing from src level: %v", subPaths)
 	}
 }
 
@@ -84,13 +84,13 @@ func TestBuildTreeLevelPathErrors(t *testing.T) {
 	mustWrite(t, root, "doc.md")
 
 	if _, err := BuildTreeLevel(root, ".."); !errors.Is(err, errTreePath) {
-		t.Errorf("잘못된 경로 오류가 errTreePath로 식별되지 않음: %v", err)
+		t.Errorf("invalid path error not identified as errTreePath: %v", err)
 	}
 	if _, err := BuildTreeLevel(root, "missing"); !errors.Is(err, errTreePath) {
-		t.Errorf("없는 경로 오류가 errTreePath로 식별되지 않음: %v", err)
+		t.Errorf("missing path error not identified as errTreePath: %v", err)
 	}
 	if _, err := BuildTreeLevel(root, ""); err != nil {
-		t.Errorf("루트 조회 실패: %v", err)
+		t.Errorf("root lookup failed: %v", err)
 	}
 }
 

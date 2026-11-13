@@ -20,7 +20,7 @@ type testServer struct {
 	root   string
 }
 
-// newTestServer는 folder 모드 서버를 띄운다. 전사가 실제 API를 부르지 않도록 키와 HOME을 비운다.
+// newTestServer starts a folder-mode server. It clears the key and HOME so transcription never calls the real API.
 func newTestServer(t *testing.T) *testServer {
 	t.Helper()
 	t.Setenv(openaiKeyEnv, "")
@@ -74,7 +74,7 @@ func decodeJSON[T any](t *testing.T, res *http.Response) T {
 	defer res.Body.Close()
 	var v T
 	if err := json.NewDecoder(res.Body).Decode(&v); err != nil {
-		t.Fatalf("응답 디코드 실패: %v", err)
+		t.Fatalf("failed to decode response: %v", err)
 	}
 	return v
 }
@@ -94,11 +94,11 @@ func (ts *testServer) waitForJob(t *testing.T, id string) *TranscribeJob {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	t.Fatalf("후처리가 시간 안에 끝나지 않음: %s", id)
+	t.Fatalf("post-processing did not finish in time: %s", id)
 	return nil
 }
 
-// 업로드한 문서 이벤트가 events.json에 그대로 저장되고, 후처리가 prompt.txt를 만든다.
+// Uploaded document events are saved as-is to events.json, and post-processing writes prompt.txt.
 func TestHandleRecordingSavesEventsAndRunsPipeline(t *testing.T) {
 	ts := newTestServer(t)
 
@@ -114,20 +114,20 @@ func TestHandleRecordingSavesEventsAndRunsPipeline(t *testing.T) {
 	}
 	result := decodeJSON[RecordingResult](t, res)
 	if !result.Transcribing {
-		t.Error("후처리가 시작되지 않음")
+		t.Error("post-processing did not start")
 	}
 
 	data, err := os.ReadFile(filepath.Join(result.Dir, eventsFileName))
 	if err != nil {
-		t.Fatalf("events.json 읽기 실패: %v", err)
+		t.Fatalf("failed to read events.json: %v", err)
 	}
 	var saved RecordingMeta
 	if err := json.Unmarshal(data, &saved); err != nil {
-		t.Fatalf("events.json 파싱 실패: %v", err)
+		t.Fatalf("failed to parse events.json: %v", err)
 	}
 	wantTypes := []string{"open", "focus", "word"}
 	if len(saved.Events) != len(wantTypes) {
-		t.Fatalf("events = %d개, want %d개: %+v", len(saved.Events), len(wantTypes), saved.Events)
+		t.Fatalf("events = %d, want %d: %+v", len(saved.Events), len(wantTypes), saved.Events)
 	}
 	for i, want := range wantTypes {
 		if saved.Events[i].Type != want {
@@ -135,7 +135,7 @@ func TestHandleRecordingSavesEventsAndRunsPipeline(t *testing.T) {
 		}
 	}
 	if saved.Events[1].File != "a.md" || saved.Events[1].T != 1500 || saved.Events[1].Text != "x" {
-		t.Errorf("문서 이벤트 내용 불일치: %+v", saved.Events[1])
+		t.Errorf("document event mismatch: %+v", saved.Events[1])
 	}
 
 	job := ts.waitForJob(t, result.ID)
@@ -146,19 +146,19 @@ func TestHandleRecordingSavesEventsAndRunsPipeline(t *testing.T) {
 		t.Errorf("job.Prompt = %q", job.Prompt)
 	}
 	if job.PromptRel != "" {
-		t.Errorf("프로젝트 밖의 녹화에 상대 경로가 있음: %q", job.PromptRel)
+		t.Errorf("recording outside the project has a relative path: %q", job.PromptRel)
 	}
 	if job.Transcript != "" || job.TranscriptRel != "" {
-		t.Errorf("전사 없이 transcript 경로가 채워짐: %+v", job)
+		t.Errorf("transcript path set without transcription: %+v", job)
 	}
 	text, err := os.ReadFile(job.Prompt)
-	if err != nil || !strings.Contains(string(text), `[00:01] 클릭: "x" (a.md:2)`) {
-		t.Errorf("prompt.txt 내용 불일치 (%v):\n%s", err, text)
+	if err != nil || !strings.Contains(string(text), `[00:01] Click: "x" (a.md:2)`) {
+		t.Errorf("prompt.txt content mismatch (%v):\n%s", err, text)
 	}
 }
 
-// DNS 리바인딩: evil.com이 127.0.0.1을 가리키게 된 페이지는 Origin과 Host를 모두 evil.com:<port>로 맞출 수 있다.
-// 호스트:포트 일치만으로는 통과하므로 로컬 호스트 이름 조건과 전역 Host 가드가 함께 막아야 한다.
+// DNS rebinding: a page whose evil.com resolves to 127.0.0.1 can set both Origin and Host to evil.com:<port>.
+// A host:port match alone would pass, so the local host name rule and the global Host guard must block it together.
 func TestRejectsDNSRebindingHost(t *testing.T) {
 	ts := newTestServer(t)
 	port := ts.Listener.Addr().(*net.TCPAddr).Port
@@ -174,7 +174,7 @@ func TestRejectsDNSRebindingHost(t *testing.T) {
 	}
 	res.Body.Close()
 	if res.StatusCode != http.StatusForbidden {
-		t.Errorf("리바인딩 settings status = %d, want 403", res.StatusCode)
+		t.Errorf("rebinding settings status = %d, want 403", res.StatusCode)
 	}
 
 	body, contentType := buildRecordingForm(t, "X", "audio/webm", `{}`)
@@ -188,10 +188,10 @@ func TestRejectsDNSRebindingHost(t *testing.T) {
 	}
 	res.Body.Close()
 	if res.StatusCode != http.StatusForbidden {
-		t.Errorf("리바인딩 업로드 status = %d, want 403", res.StatusCode)
+		t.Errorf("rebinding upload status = %d, want 403", res.StatusCode)
 	}
 
-	// Origin 없는 기존 GET 엔드포인트도 전역 Host 가드가 막는다.
+	// The global Host guard also blocks existing GET endpoints without Origin.
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+apiModePath, nil)
 	req.Host = "evil.com:1234"
 	res, err = http.DefaultClient.Do(req)
@@ -200,10 +200,10 @@ func TestRejectsDNSRebindingHost(t *testing.T) {
 	}
 	res.Body.Close()
 	if res.StatusCode != http.StatusForbidden {
-		t.Errorf("로컬이 아닌 Host의 /api/mode status = %d, want 403", res.StatusCode)
+		t.Errorf("/api/mode with non-local Host status = %d, want 403", res.StatusCode)
 	}
 
-	// 정상 요청(127.0.0.1)과 localhost Host는 통과한다.
+	// Normal requests (127.0.0.1) and the localhost Host pass.
 	res = ts.get(t, apiModePath)
 	res.Body.Close()
 	if res.StatusCode != http.StatusOK {
@@ -221,7 +221,7 @@ func TestRejectsDNSRebindingHost(t *testing.T) {
 	}
 }
 
-// isSameOrigin 단위 검증 (전역 가드 없이): 로컬 호스트 이름과 호스트:포트 일치를 모두 요구한다.
+// isSameOrigin unit check (without the global guard): requires both a local host name and a matching host:port.
 func TestIsSameOriginRequiresLocalHostname(t *testing.T) {
 	cases := []struct {
 		host, origin string
@@ -279,7 +279,7 @@ func TestStopHTTPStopsServing(t *testing.T) {
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("서버가 응답하지 않음: %v", err)
+			t.Fatalf("server did not respond: %v", err)
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
@@ -287,6 +287,6 @@ func TestStopHTTPStopsServing(t *testing.T) {
 	select {
 	case <-done:
 	case <-time.After(2 * time.Second):
-		t.Fatal("StopHTTP 후 Start가 반환하지 않음")
+		t.Fatal("Start did not return after StopHTTP")
 	}
 }

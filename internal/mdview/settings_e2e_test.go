@@ -72,7 +72,7 @@ func TestSettingsBrowserEndToEnd(t *testing.T) {
 			open()
 			run(chromedp.Poll(`document.querySelector('#settings-model').value === 'whisper-1'`, nil))
 			const secret = "sk-settings-ui-test-not-a-real-key"
-			run(chromedp.SendKeys("#settings-api-key", secret, chromedp.ByQuery), chromedp.SetValue("#settings-model", "gpt-4o-mini-transcribe", chromedp.ByQuery), chromedp.Click("#settings-save", chromedp.ByQuery), chromedp.Poll(`document.querySelector('#settings-message').textContent.includes('저장했습니다')`, nil))
+			run(chromedp.SendKeys("#settings-api-key", secret, chromedp.ByQuery), chromedp.SetValue("#settings-model", "gpt-4o-mini-transcribe", chromedp.ByQuery), chromedp.Click("#settings-save", chromedp.ByQuery), chromedp.Poll(`document.querySelector('#settings-message').textContent.includes('Saved')`, nil))
 			cfg, err := LoadConfig()
 			if err != nil || cfg.OpenAIAPIKey != secret || cfg.TranscribeModel != "gpt-4o-mini-transcribe" {
 				t.Fatal("browser settings were not persisted")
@@ -84,7 +84,7 @@ func TestSettingsBrowserEndToEnd(t *testing.T) {
 			}
 			run(chromedp.Click("#settings-close", chromedp.ByQuery), chromedp.Reload(), chromedp.WaitVisible("#settings-button", chromedp.ByQuery))
 			open()
-			run(chromedp.Poll(`document.querySelector('#settings-model').value==='gpt-4o-mini-transcribe' && document.querySelector('#settings-api-key').value==='' && document.querySelector('#settings-key-badge').textContent==='설정됨'`, nil))
+			run(chromedp.Poll(`document.querySelector('#settings-model').value==='gpt-4o-mini-transcribe' && document.querySelector('#settings-api-key').value==='' && document.querySelector('#settings-key-badge').textContent==='Set'`, nil))
 			var storage string
 			run(chromedp.Evaluate(`JSON.stringify({local:{...localStorage},session:{...sessionStorage}})`, &storage))
 			if strings.Contains(storage, secret) {
@@ -97,7 +97,7 @@ func TestSettingsBrowserEndToEnd(t *testing.T) {
 				t.Fatal("closing without saving changed the stored key")
 			}
 			open()
-			run(chromedp.Click("#settings-key-clear", chromedp.ByQuery), chromedp.Click("#settings-save", chromedp.ByQuery), chromedp.Poll(`document.querySelector('#settings-message').textContent.includes('저장했습니다') && document.querySelector('#settings-key-badge').textContent==='미설정'`, nil))
+			run(chromedp.Click("#settings-key-clear", chromedp.ByQuery), chromedp.Click("#settings-save", chromedp.ByQuery), chromedp.Poll(`document.querySelector('#settings-message').textContent.includes('Saved') && document.querySelector('#settings-key-badge').textContent==='Not set'`, nil))
 			cfg, _ = LoadConfig()
 			if cfg.OpenAIAPIKey != "" {
 				t.Fatal("key deletion did not persist")
@@ -126,7 +126,7 @@ func TestSettingsBrowserEndToEnd(t *testing.T) {
 	}
 }
 
-// e2eChromeCandidates는 브라우저 E2E 테스트가 찾는 Chrome / Chromium 표준 설치 경로이다.
+// e2eChromeCandidates are the standard Chrome / Chromium install paths the browser E2E test looks for.
 var e2eChromeCandidates = []string{
 	"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
 	"/Applications/Chromium.app/Contents/MacOS/Chromium",
@@ -138,7 +138,7 @@ var e2eChromeCandidates = []string{
 	`C:\Program Files (x86)\Google\Chrome\Application\chrome.exe`,
 }
 
-// findChrome은 설치된 Chrome 실행 경로를 찾는다. 없으면 빈 문자열을 반환한다.
+// findChrome finds the installed Chrome executable path. It returns an empty string if none is found.
 func findChrome() string {
 	for _, p := range e2eChromeCandidates {
 		if st, err := os.Stat(p); err == nil && !st.IsDir() {
