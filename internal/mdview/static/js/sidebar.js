@@ -1,7 +1,7 @@
-// sidebar.js — 파일 트리 사이드바 Worker
+// sidebar.js — file tree sidebar Worker
 //
-// 트리 전체를 한 번에 로딩하지 않고, 폴더가 펼쳐질 때마다 해당 디렉토리의
-// 1레벨 목록만 /api/tree?path= 로 요청한다. 같은 폴더를 다시 펼치면 새로 고친다.
+// Instead of loading the whole tree at once, each time a folder is expanded only that
+// directory's first-level listing is requested via /api/tree?path=. Re-expanding a folder refreshes it.
 
 const API_TREE_PATH = '/api/tree';
 
@@ -45,7 +45,7 @@ function buildDirElement(node) {
   details.appendChild(list);
 
   details.addEventListener('toggle', () => {
-    // 코드로 연 경우(openLoaded)는 이미 최신 목록이므로 재요청하지 않는다.
+    // When opened from code (openLoaded) the listing is already fresh, so do not refetch.
     if (details._suppressNextToggle) {
       details._suppressNextToggle = false;
       return;
@@ -66,7 +66,7 @@ function populate(details, node, openPaths = null) {
   restoreOpenDirs(list, openPaths);
 }
 
-// 목록을 새로 채운 뒤, 갱신 전에 펼쳐져 있던 하위 폴더를 다시 로드해 펼친다.
+// After refilling the listing, reload and re-expand subfolders that were expanded before the refresh.
 function restoreOpenDirs(list, openPaths) {
   if (!openPaths || openPaths.size === 0) return;
   list.querySelectorAll(':scope > li > details.tree-dir').forEach((dir) => {
@@ -75,14 +75,14 @@ function restoreOpenDirs(list, openPaths) {
   });
 }
 
-// 갱신으로 사라지기 전, 이 폴더 아래에서 펼쳐져 있던 경로들을 기억한다.
+// Remember which paths under this folder were expanded before the refresh removes them.
 function collectOpenPaths(details) {
   return new Set(
     [...details.querySelectorAll('details.tree-dir[open]')].map((d) => d.dataset.path)
   );
 }
 
-// 같은 폴더의 동시 요청은 진행 중인 fetch 하나로 합친다.
+// Concurrent requests for the same folder are merged into the single in-flight fetch.
 function loadChildren(details, preserveOpenPaths = null) {
   if (details._childrenPromise) return details._childrenPromise;
   const openPaths = preserveOpenPaths || collectOpenPaths(details);
@@ -104,19 +104,19 @@ function showLoadError(details) {
   const li = document.createElement('li');
   const msg = document.createElement('div');
   msg.className = 'tree-error';
-  msg.textContent = '목록을 불러오지 못했습니다.';
+  msg.textContent = 'Failed to load the listing.';
   li.appendChild(msg);
   list.replaceChildren(li);
 }
 
-// toggle 핸들러의 재요청 없이 <details>를 펼친다 (이미 목록이 채워진 경우).
+// Expands <details> without the toggle handler refetching (when the listing is already filled).
 function openLoaded(details) {
   if (details.open) return;
   details._suppressNextToggle = true;
   details.open = true;
 }
 
-// 닫혀 있으면 목록을 로드한 뒤 펼치고, 이미 열려 있으면 로드 완료만 기다린다.
+// If closed, load the listing and expand; if already open, just wait for loading to finish.
 async function ensureOpen(details) {
   if (details.open) {
     if (details._childrenPromise) await details._childrenPromise;
@@ -132,7 +132,7 @@ export async function initSidebar({ onSelect }) {
   try {
     root = await fetchLevel('');
   } catch {
-    tree.innerHTML = '<div class="tree-error">트리를 불러오지 못했습니다.</div>';
+    tree.innerHTML = '<div class="tree-error">Failed to load the tree.</div>';
     return;
   }
   rootDetails = buildDirElement(root);
@@ -141,16 +141,16 @@ export async function initSidebar({ onSelect }) {
   tree.replaceChildren(rootDetails);
 }
 
-/** 활성 파일 표시를 갱신한다. 빈 값이면 모든 활성 표시를 지운다. */
+/** Updates the active-file highlight. An empty value clears all highlights. */
 export function highlightFile(relPath) {
   activePath = relPath || '';
   applyActiveHighlight();
 }
 
 /**
- * 조상 폴더들을 순서대로 로드/펼침한 뒤 해당 파일을 활성 표시한다.
- * lazy 트리에서는 딥링크·문서 간 링크로 연 파일의 조상이 아직 로드되지
- * 않았을 수 있어 highlightFile 대신 이 함수를 사용한다.
+ * Loads/expands ancestor folders in order, then marks the file as active.
+ * In the lazy tree, ancestors of a file opened via a deep link or cross-document link
+ * may not be loaded yet, so use this function instead of highlightFile.
  */
 export async function revealFile(relPath) {
   activePath = relPath || '';
@@ -167,7 +167,7 @@ export async function revealFile(relPath) {
       await ensureOpen(dir);
     }
   } catch {
-    return; // 트리 로드 실패 시 하이라이트만 생략한다
+    return; // If the tree fails to load, just skip the highlight
   }
   applyActiveHighlight();
 }
@@ -182,6 +182,6 @@ function applyActiveHighlight() {
 }
 
 function cssEscapeAttr(value) {
-  // 속성 셀렉터에 안전하게 들어갈 수 있도록 이스케이프
+  // Escape so it can be safely placed in an attribute selector
   return value.replace(/(["\\])/g, '\\$1');
 }

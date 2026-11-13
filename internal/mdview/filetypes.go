@@ -12,8 +12,8 @@ const (
 	envFilePrefix = ".env."
 )
 
-// viewableExts는 트리에 노출하고 뷰어로 열 수 있는 파일 확장자 목록이다.
-// static/js/code-viewer.js 의 EXT_LANGUAGES/NAME_LANGUAGES 와 동기화를 유지해야 한다.
+// viewableExts lists file extensions shown in the tree and openable in the viewer.
+// Keep it in sync with EXT_LANGUAGES/NAME_LANGUAGES in static/js/code-viewer.js.
 var viewableExts = map[string]bool{
 	markdownExt: true,
 	pdfExt:      true,
@@ -75,7 +75,7 @@ var viewableExts = map[string]bool{
 	".lock":       true,
 }
 
-// viewableNames는 확장자가 없어도 뷰어로 열 수 있는 특수 파일명 목록이다(소문자 비교).
+// viewableNames lists special file names openable in the viewer without an extension (compared in lowercase).
 var viewableNames = map[string]bool{
 	"dockerfile":     true,
 	"makefile":       true,
@@ -85,8 +85,8 @@ var viewableNames = map[string]bool{
 	".editorconfig":  true,
 }
 
-// IsViewablePath는 해당 경로의 파일이 트리 노출/뷰어 열람 대상인지 반환한다.
-// 슬래시 구분 상대 경로와 OS 절대 경로를 모두 허용한다.
+// IsViewablePath reports whether the file at the path is shown in the tree and openable in the viewer.
+// Accepts both slash-separated relative paths and OS absolute paths.
 func IsViewablePath(p string) bool {
 	name := strings.ToLower(filepath.Base(filepath.FromSlash(p)))
 	if viewableNames[name] {
@@ -98,13 +98,13 @@ func IsViewablePath(p string) bool {
 	return viewableExts[filepath.Ext(name)]
 }
 
-// IsMarkdownPath는 해당 경로가 마크다운 파일인지 반환한다.
+// IsMarkdownPath reports whether the path is a Markdown file.
 func IsMarkdownPath(p string) bool {
 	return strings.EqualFold(filepath.Ext(p), markdownExt)
 }
 
-// IsPDFPath는 해당 경로가 PDF 파일인지 반환한다.
-// PDF는 바이너리라 WS 텍스트 프레임으로 내용을 전달하지 않고, 클라이언트가 URL로 다시 읽는다.
+// IsPDFPath reports whether the path is a PDF file.
+// PDFs are binary, so their content is not sent as WS text frames; the client re-reads them by URL.
 func IsPDFPath(p string) bool {
 	return strings.EqualFold(filepath.Ext(p), pdfExt)
 }

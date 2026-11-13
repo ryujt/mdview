@@ -12,7 +12,7 @@ import (
 
 var configMu sync.RWMutex
 
-// 사용자 설정 파일 위치: ~/.config/mdview/config.json
+// User config file location: ~/.config/mdview/config.json
 const (
 	configDirName  = "mdview"
 	configFileName = "config.json"
@@ -20,26 +20,26 @@ const (
 	openaiKeyEnv = "OPENAI_API_KEY"
 )
 
-// ErrNoOpenAIKey는 환경변수와 설정 파일 어디에도 OpenAI API 키가 없을 때 ResolveOpenAIKey가 감싸서 돌려주는 오류다.
-var ErrNoOpenAIKey = errors.New("OpenAI API 키가 없습니다")
+// ErrNoOpenAIKey is the error ResolveOpenAIKey wraps when neither the environment nor the config file has an OpenAI API key.
+var ErrNoOpenAIKey = errors.New("OpenAI API key not found")
 
-// Config는 mdview의 사용자 설정이다.
+// Config is mdview's user configuration.
 type Config struct {
-	// OpenAIAPIKey는 전사 API 호출에 사용하는 키이다.
+	// OpenAIAPIKey is the key used for transcription API calls.
 	OpenAIAPIKey    string `json:"openai_api_key"`
 	TranscribeModel string `json:"transcribe_model,omitempty"`
 }
 
-// ConfigDir은 mdview 설정 디렉토리(~/.config/mdview)를 반환한다.
+// ConfigDir returns the mdview config directory (~/.config/mdview).
 func ConfigDir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return "", fmt.Errorf("홈 디렉토리를 찾을 수 없습니다: %w", err)
+		return "", fmt.Errorf("cannot find home directory: %w", err)
 	}
 	return filepath.Join(home, ".config", configDirName), nil
 }
 
-// ConfigPath는 설정 파일 경로를 반환한다.
+// ConfigPath returns the config file path.
 func ConfigPath() (string, error) {
 	dir, err := ConfigDir()
 	if err != nil {
@@ -48,7 +48,7 @@ func ConfigPath() (string, error) {
 	return filepath.Join(dir, configFileName), nil
 }
 
-// LoadConfig는 설정 파일을 읽는다. 파일이 없으면 빈 설정을 반환한다.
+// LoadConfig reads the config file. It returns an empty config if the file does not exist.
 func LoadConfig() (*Config, error) {
 	configMu.RLock()
 	defer configMu.RUnlock()
@@ -65,17 +65,17 @@ func loadConfig() (*Config, error) {
 		return &Config{}, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("설정 파일 읽기 실패 (%s): %w", path, err)
+		return nil, fmt.Errorf("failed to read config file (%s): %w", path, err)
 	}
 	var cfg Config
 	if err := json.Unmarshal(data, &cfg); err != nil {
-		return nil, fmt.Errorf("설정 파일 파싱 실패 (%s): %w", path, err)
+		return nil, fmt.Errorf("failed to parse config file (%s): %w", path, err)
 	}
 	return &cfg, nil
 }
 
-// UpdateConfig는 생략한 필드와 알 수 없는 기존 설정을 유지하며 원자적으로 저장한다.
-// API 키 포인터가 빈 문자열을 가리키면 저장된 키를 삭제한다.
+// UpdateConfig saves atomically, preserving omitted fields and unknown existing settings.
+// If the API key pointer points to an empty string, the stored key is deleted.
 func UpdateConfig(apiKey, model *string) error {
 	configMu.Lock()
 	defer configMu.Unlock()
@@ -129,7 +129,7 @@ func UpdateConfig(apiKey, model *string) error {
 	return os.Rename(file.Name(), path)
 }
 
-// ResolveTranscribeModel은 저장된 선택을 읽고, 설정이 없으면 기존 기본 모델을 쓴다.
+// ResolveTranscribeModel reads the saved choice and falls back to the default model if none is set.
 func ResolveTranscribeModel() (string, error) {
 	cfg, err := LoadConfig()
 	if err != nil {
@@ -139,12 +139,12 @@ func ResolveTranscribeModel() (string, error) {
 		return DefaultTranscribeModel, nil
 	}
 	if !isAPIModel(cfg.TranscribeModel) {
-		return "", errors.New("지원하지 않는 전사 모델입니다")
+		return "", errors.New("unsupported transcription model")
 	}
 	return cfg.TranscribeModel, nil
 }
 
-// ResolveOpenAIKey는 OPENAI_API_KEY 환경변수 → 설정 파일 순서로 API 키를 찾는다.
+// ResolveOpenAIKey looks up the API key from the OPENAI_API_KEY environment variable, then the config file.
 func ResolveOpenAIKey() (string, error) {
 	if key := os.Getenv(openaiKeyEnv); key != "" {
 		return key, nil
@@ -158,6 +158,6 @@ func ResolveOpenAIKey() (string, error) {
 	}
 	path, _ := ConfigPath()
 	return "", fmt.Errorf(
-		"%w. %s 환경변수를 설정하거나 설정 파일을 작성하세요:\n  %s\n  {\"openai_api_key\": \"sk-...\"}",
+		"%w. Set the %s environment variable or create the config file:\n  %s\n  {\"openai_api_key\": \"sk-...\"}",
 		ErrNoOpenAIKey, openaiKeyEnv, path)
 }

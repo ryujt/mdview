@@ -67,7 +67,7 @@ function getVerticalWeight(name, containers) {
 }
 
 function toId(name) {
-  // 'lyt-' 접두사: 호스트 페이지의 전역 CSS id 규칙(#sidebar, #content 등)과의 충돌 방지
+  // 'lyt-' prefix: avoids clashing with the host page's global CSS id rules (#sidebar, #content, etc.)
   return 'lyt-' + name.split(' ').map((word, index) =>
     index === 0 ? word.toLowerCase() : word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
   ).join('');

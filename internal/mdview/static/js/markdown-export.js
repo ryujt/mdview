@@ -10,14 +10,14 @@ export async function jobflowToPng(script) {
   const svg = JobFlowToSVG.generateSVG(script);
   const [, width, height] = svg.match(/viewBox="0 0 ([\d.]+) ([\d.]+)"/) || [];
   if (!(Number(width) > 0 && Number(height) > 0)) {
-    throw new Error('잡플로우에 그릴 객체가 없습니다.');
+    throw new Error('The jobflow has no objects to draw.');
   }
   const scale = Math.min(2, 4096 / width, 4096 / height);
   const canvas = document.createElement('canvas');
   canvas.width = Math.max(1, Math.round(width * scale));
   canvas.height = Math.max(1, Math.round(height * scale));
   const context = canvas.getContext('2d');
-  if (!context) throw new Error('이미지를 생성할 수 없습니다.');
+  if (!context) throw new Error('Unable to create the image.');
 
   const url = URL.createObjectURL(new Blob([
     svg.replace('<svg ', '<svg style="font-family:system-ui, sans-serif" '),
@@ -26,7 +26,7 @@ export async function jobflowToPng(script) {
     const image = new Image();
     await new Promise((resolve, reject) => {
       image.onload = resolve;
-      image.onerror = () => reject(new Error('잡플로우 이미지를 생성할 수 없습니다.'));
+      image.onerror = () => reject(new Error('Unable to create the jobflow image.'));
       image.src = url;
     });
     context.fillStyle = '#ffffff';
@@ -119,11 +119,11 @@ export async function prepareMarkdownExport(source, { renderJobflow = jobflowToP
       const filename = `jobflow-${index}.png`;
       const dataUrl = await renderJobflow(script);
       if (!dataUrl?.startsWith('data:image/png;base64,')) {
-        throw new Error(`잡플로우 ${index} 이미지를 생성할 수 없습니다.`);
+        throw new Error(`Unable to create the image for jobflow ${index}.`);
       }
       images.push({ filename, dataUrl });
       const ending = lines[end].slice(text[end].length);
-      output.push(`${prefix}![잡플로우 ${index}](images/${filename})${ending}`);
+      output.push(`${prefix}![Jobflow ${index}](images/${filename})${ending}`);
     } else {
       const convert = language === 'navigation' ? navigationToMermaid : stateToMermaid;
       const eol = lines[start].endsWith('\r\n') ? '\r\n' : '\n';

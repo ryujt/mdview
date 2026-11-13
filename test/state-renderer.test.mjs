@@ -28,12 +28,12 @@ test('State diagrams keep valid, unique identifiers beyond 26 nodes', () => {
 });
 
 test('State conversion preserves start, end, rounded states and event labels', () => {
-  const mermaid = stateToMermaid('<s> --> (대기)\n(대기) --> <완료> : 요청 "확인"\n<완료> --> <e>');
+  const mermaid = stateToMermaid('<s> --> (Waiting)\n(Waiting) --> <Done> : request "confirm"\n<Done> --> <e>');
   assert.ok(mermaid.includes('A(( ))'));
-  assert.ok(mermaid.includes('B("대기")'));
-  assert.ok(mermaid.includes('C{{"완료"}}'));
+  assert.ok(mermaid.includes('B("Waiting")'));
+  assert.ok(mermaid.includes('C{{"Done"}}'));
   assert.ok(mermaid.includes('D(( ))'));
-  assert.ok(mermaid.includes('B -->|"요청 #quot;확인#quot;"| C'));
+  assert.ok(mermaid.includes('B -->|"request #quot;confirm#quot;"| C'));
   assert.ok(mermaid.includes('style A fill:#fff,stroke:#000'));
   assert.ok(mermaid.includes('style D fill:#000,stroke:#000'));
 });

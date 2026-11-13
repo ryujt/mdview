@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// 녹화(오디오 + 이벤트 타임라인) 저장 관련 정책 상수
+// Policy constants for saving recordings (audio + event timeline)
 const (
 	recordingsDirName   = "mdview-recordings"
 	recordingDirPrefix  = "rec-"
@@ -23,11 +23,11 @@ const (
 	recordingDirPerm  = 0o700
 	recordingFilePerm = 0o600
 
-	// 동일 초에 저장이 겹칠 때 디렉토리 이름 충돌을 피하기 위한 최대 시도 횟수
+	// Maximum attempts to avoid directory name collisions when saves land in the same second
 	maxDirSuffixTries = 100
 )
 
-// audioExtByMime는 MediaRecorder가 생성하는 오디오 MIME 타입별 저장 확장자이다.
+// audioExtByMime maps audio MIME types produced by MediaRecorder to file extensions.
 var audioExtByMime = map[string]string{
 	"audio/webm": ".webm",
 	"video/webm": ".webm",
@@ -36,8 +36,8 @@ var audioExtByMime = map[string]string{
 	"audio/mpeg": ".mp3",
 }
 
-// AudioExtFromMime는 업로드된 오디오 파트의 Content-Type에서 저장 확장자를 결정한다.
-// 코덱 파라미터(예: "audio/webm;codecs=opus")는 무시하며, 알 수 없는 타입은 webm으로 취급한다.
+// AudioExtFromMime determines the file extension from the uploaded audio part's Content-Type.
+// Codec parameters (e.g. "audio/webm;codecs=opus") are ignored; unknown types are treated as webm.
 func AudioExtFromMime(contentType string) string {
 	mediaType, _, err := mime.ParseMediaType(contentType)
 	if err != nil {
@@ -49,9 +49,9 @@ func AudioExtFromMime(contentType string) string {
 	return defaultAudioExt
 }
 
-// SaveRecording은 오디오 스트림과 이벤트 메타를 디스크에 저장하는 Worker이다.
-// 저장 구조: <base>/mdview-recordings/rec-<timestamp>[-N]/{audio.<ext>, events.json}
-// meta에는 서버가 결정한 오디오 파일명(audio)과 저장 시각(savedAt)을 주입한다.
+// SaveRecording is a Worker that saves the audio stream and event metadata to disk.
+// Layout: <base>/mdview-recordings/rec-<timestamp>[-N]/{audio.<ext>, events.json}
+// The server-chosen audio file name (audio) and save time (savedAt) are injected into meta.
 func SaveRecording(base string, audio io.Reader, contentType string, meta map[string]any, now time.Time) (dir string, audioName string, err error) {
 	dir, err = createRecordingDir(base, now)
 	if err != nil {
@@ -86,8 +86,8 @@ const (
 	jsonKeySavedAt = "savedAt"
 )
 
-// createRecordingDir는 타임스탬프 기반 녹화 디렉토리를 생성한다.
-// 이미 존재하면 -2, -3 … 접미사를 붙여 유일한 디렉토리를 확보한다.
+// createRecordingDir creates a timestamp-based recording directory.
+// If it already exists, a -2, -3, ... suffix is appended to get a unique directory.
 func createRecordingDir(base string, now time.Time) (string, error) {
 	parent := filepath.Join(base, recordingsDirName)
 	if err := os.MkdirAll(parent, recordingDirPerm); err != nil {
@@ -111,7 +111,7 @@ func createRecordingDir(base string, now time.Time) (string, error) {
 	return "", fmt.Errorf("recording dir error: too many recordings at %s", stamp)
 }
 
-// summarizeRecordingEvents는 업로드 메타의 이벤트 목록을 로그용 한 줄 요약으로 만든다.
+// summarizeRecordingEvents turns the event list in the upload meta into one-line summaries for logging.
 func summarizeRecordingEvents(meta map[string]any) (int, string) {
 	const maxLines = 50
 	events, ok := meta["events"].([]any)
@@ -121,7 +121,7 @@ func summarizeRecordingEvents(meta map[string]any) (int, string) {
 	var lines []string
 	for i, raw := range events {
 		if i >= maxLines {
-			lines = append(lines, fmt.Sprintf("... 외 %d개", len(events)-maxLines))
+			lines = append(lines, fmt.Sprintf("... and %d more", len(events)-maxLines))
 			break
 		}
 		e, ok := raw.(map[string]any)

@@ -4,7 +4,7 @@ const MARKDOWN_EXTS = ['.md', '.markdown', '.mdown', '.mkd'];
 const ENV_FILE_NAME = '.env';
 const ENV_FILE_PREFIX = '.env.';
 
-// 서버 화이트리스트(internal/mdview/filetypes.go)와 동기화를 유지해야 한다.
+// Must stay in sync with the server whitelist (internal/mdview/filetypes.go).
 const EXT_LANGUAGES = {
   go: 'go',
   js: 'javascript',
@@ -75,7 +75,7 @@ export function isMarkdownPath(path) {
   return MARKDOWN_EXTS.some((ext) => lower.endsWith(ext));
 }
 
-// 코드뷰어가 언어를 알고 있는(코드/설정으로 취급할) 파일인지 반환한다.
+// Returns whether the code viewer knows the file's language (i.e. treats it as code/config).
 export function isCodeViewerPath(path) {
   const name = baseName(path);
   if (NAME_LANGUAGES[name]) return true;
@@ -126,10 +126,10 @@ function highlightCode(code, language) {
 }
 
 /**
- * 소스코드/설정 파일을 라인 번호가 있는 코드뷰어 형태로 렌더링한다.
- * @param {string} text  파일 원본 텍스트
- * @param {string} path  파일 경로 (언어 감지에 사용)
- * @param {HTMLElement} container  렌더링 대상 요소
+ * Renders a source/config file as a code viewer with line numbers.
+ * @param {string} text  Original file text
+ * @param {string} path  File path (used for language detection)
+ * @param {HTMLElement} container  Element to render into
  */
 export function renderCode(text, path, container) {
   const code = normalizeContent(text);

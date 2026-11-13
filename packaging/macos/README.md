@@ -45,7 +45,7 @@ A local build still requires Developer ID signing and has an `-unnotarized` suff
 The build writes the following to `dist/mdview-<version>-macos-arm64/`.
 
 - `mdview-<version>-macos-arm64.pkg` is the installer for users. It includes the app with its stapled notarization ticket and the CLI link.
-- `INSTALL.md` and `시작하기.html` are the English installation and user guides.
+- `INSTALL.md` and `START-HERE.html` are the English installation and user guides.
 - `SHA256SUMS` contains SHA-256 checksums for the final PKG and installation guide.
 - `THIRD-PARTY-NOTICES.txt` contains license notices for Go and its dependencies. The notices also ship in the app resources.
 - `release.json` records the version, source commit, build time, supported OS, and notarization status.

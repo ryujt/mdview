@@ -40,9 +40,9 @@ const (
 	rootPath               = "/"
 	indexFilePath          = "static/index.html"
 
-	// 녹화 업로드 정책: 요청 전체 크기 상한 및 multipart 메모리 상한
+	// Recording upload policy: total request size limit and multipart memory limit
 	maxRecordingBytes   = 2 << 30  // 2 GiB
-	recordingFormMemory = 32 << 20 // 32 MiB (초과분은 임시 파일로 스풀)
+	recordingFormMemory = 32 << 20 // 32 MiB (the excess spills to temp files)
 	recordingAudioField = "audio"
 	recordingMetaField  = "meta"
 
@@ -69,22 +69,22 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin:     func(r *http.Request) bool { return isSameOrigin(r) },
 }
 
-// localHostnames는 mdview가 응답하는 호스트 이름이다 (서버는 127.0.0.1에만 바인드한다).
+// localHostnames are the host names mdview answers to (the server binds only to 127.0.0.1).
 var localHostnames = map[string]bool{"localhost": true, "127.0.0.1": true, "::1": true}
 
-// isLocalHostname은 포트를 뗀 호스트 이름이 로컬 루프백 이름인지 반환한다.
+// isLocalHostname reports whether a host name (without port) is a local loopback name.
 func isLocalHostname(hostname string) bool {
 	return localHostnames[strings.ToLower(hostname)]
 }
 
-// isSameOrigin은 Origin 헤더가 있으면 두 조건을 모두 요구한다.
-//  1. Origin의 호스트 이름이 로컬(localhost, 127.0.0.1, ::1)이다 — DNS 리바인딩 페이지(http://evil.com:8642)는
-//     Host 헤더까지 일치시킬 수 있으므로 호스트:포트 비교만으로는 막을 수 없다.
-//  2. Origin의 호스트:포트가 요청 대상(r.Host)과 같다 — 같은 브라우저에서 열린 다른 localhost 포트의
-//     페이지(개발 서버 등)는 호스트 이름만으로는 막을 수 없다.
+// isSameOrigin requires both conditions when an Origin header is present:
+//  1. The Origin host name is local (localhost, 127.0.0.1, ::1) — a DNS rebinding page (http://evil.com:8642)
+//     can match the Host header too, so comparing host:port alone cannot stop it.
+//  2. The Origin host:port equals the request target (r.Host) — pages on other localhost ports in the same
+//     browser (dev servers, etc.) cannot be stopped by host name alone.
 //
-// Origin이 없는 요청(curl, 같은 문서의 일부 GET)은 통과시킨다 (Host 자체는 requireLocalHost가 검증한다).
-// WS(뷰어가 소스코드·설정 파일까지 브로드캐스트), 녹화 업로드, 설정 API가 모두 이 검증을 쓴다.
+// Requests without Origin (curl, some same-document GETs) pass (requireLocalHost validates Host itself).
+// WS (the viewer broadcasts even source and config files), recording uploads, and the settings API all use this check.
 func isSameOrigin(r *http.Request) bool {
 	origin := r.Header.Get(originHeader)
 	if origin == "" {
@@ -97,7 +97,7 @@ func isSameOrigin(r *http.Request) bool {
 	return isLocalHostname(parsed.Hostname()) && strings.EqualFold(parsed.Host, r.Host)
 }
 
-// requestHostname은 r.Host에서 포트를 뗀 호스트 이름을 반환한다 (포트가 없으면 원문).
+// requestHostname returns r.Host without the port (unchanged if there is no port).
 func requestHostname(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.Host)
 	if err != nil {
@@ -106,13 +106,13 @@ func requestHostname(r *http.Request) string {
 	return host
 }
 
-// requireLocalHost는 모든 요청의 Host가 로컬 호스트 이름일 것을 요구하는 서버 전역 가드이다.
-// DNS 리바인딩으로 evil.com이 127.0.0.1을 가리키게 되면 Origin 없이 오는 GET·WS도 우리 서버에 닿으므로,
-// Origin 검증이 없는 기존 GET 엔드포인트(/api/file 등)까지 여기서 막는다.
+// requireLocalHost is a server-wide guard requiring every request's Host to be a local host name.
+// If DNS rebinding makes evil.com resolve to 127.0.0.1, GETs and WS without Origin also reach our server,
+// so this also blocks existing GET endpoints without an Origin check (/api/file, etc.).
 func requireLocalHost(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !isLocalHostname(requestHostname(r)) {
-			logging.Warn("[Server] 로컬이 아닌 Host 거부: %q path=%s", r.Host, r.URL.Path)
+			logging.Warn("[Server] rejected non-local Host: %q path=%s", r.Host, r.URL.Path)
 			http.Error(w, forbiddenHostMessage, http.StatusForbidden)
 			return
 		}
@@ -120,8 +120,8 @@ func requireLocalHost(next http.Handler) http.Handler {
 	})
 }
 
-// hasLocalOrigin은 설정 저장처럼 서버 상태를 바꾸는 요청에 쓰는 더 엄격한 검증이다.
-// 같은 브라우저의 다른 사이트가 보내는 요청을 막기 위해 Origin 헤더가 존재하고 같은 오리진(로컬 호스트 + 호스트:포트 일치)일 것을 요구하며, Sec-Fetch-Site가 있으면 same-origin이어야 한다.
+// hasLocalOrigin is a stricter check for requests that change server state, such as saving settings.
+// To block requests from other sites in the same browser, it requires an Origin header that is same-origin (local host and matching host:port), and Sec-Fetch-Site, if present, must be same-origin.
 func hasLocalOrigin(r *http.Request) bool {
 	if r.Header.Get(originHeader) == "" {
 		return false
@@ -132,34 +132,34 @@ func hasLocalOrigin(r *http.Request) bool {
 	return isSameOrigin(r)
 }
 
-// Server는 HTTP + WS를 제공하는 Gateway이다.
-// file 모드 / folder 모드를 모두 지원한다.
+// Server is the Gateway that serves HTTP + WS.
+// It supports both file mode and folder mode.
 type Server struct {
 	mode Mode
 	hub  *Hub
 
-	// file 모드: 고정된 파일 절대 경로
+	// file mode: absolute path of the fixed file
 	filePath string
 
-	// folder 모드: 루트 디렉토리 절대 경로
+	// folder mode: absolute path of the root directory
 	root string
 
-	// 녹화 자동 전사 작업 상태 (id = 녹화 디렉토리 이름)
+	// Auto-transcription job state per recording (id = recording directory name)
 	jobMu          sync.Mutex
 	transcribeJobs map[string]*TranscribeJob
 
-	// pipeline은 녹화 저장 후 후처리(전사·프롬프트)이다.
+	// pipeline is the post-processing (transcription, prompt) after a recording is saved.
 	pipeline   *Pipeline
 	completion *recordingCompletion
-	// pending은 진행 중인 후처리 goroutine이다. 종료 시 여기서 기다린다.
+	// pending tracks in-flight post-processing goroutines. Shutdown waits on it.
 	pending sync.WaitGroup
 
-	// httpServer는 Start가 만든 HTTP 서버이다 (StopHTTP가 종료한다).
+	// httpServer is the HTTP server created by Start (closed by StopHTTP).
 	httpMu     sync.Mutex
 	httpServer *http.Server
 }
 
-// NewFileServer는 단일 파일을 서빙하는 Server를 생성한다.
+// NewFileServer creates a Server that serves a single file.
 func NewFileServer(hub *Hub, filePath string) (*Server, error) {
 	abs, err := filepath.Abs(filePath)
 	if err != nil {
@@ -170,7 +170,7 @@ func NewFileServer(hub *Hub, filePath string) (*Server, error) {
 	return s, nil
 }
 
-// NewFolderServer는 디렉토리를 서빙하는 Server를 생성한다.
+// NewFolderServer creates a Server that serves a directory.
 func NewFolderServer(hub *Hub, root string) (*Server, error) {
 	abs, err := filepath.Abs(root)
 	if err != nil {
@@ -191,8 +191,8 @@ func newServer(mode Mode, hub *Hub) *Server {
 	return s
 }
 
-// Handler는 전체 라우팅이 구성된 HTTP 핸들러를 반환한다 (테스트에서도 사용).
-// 모든 경로는 requireLocalHost로 감싸 로컬이 아닌 Host를 거부한다.
+// Handler returns the HTTP handler with all routes configured (also used in tests).
+// Every route is wrapped in requireLocalHost to reject non-local Hosts.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc(rootPath, s.handleIndex)
@@ -209,7 +209,7 @@ func (s *Server) Handler() http.Handler {
 	return requireLocalHost(mux)
 }
 
-// Start는 주어진 리스너에서 HTTP 서버를 실행한다 (블로킹). StopHTTP로 종료하면 조용히 반환한다.
+// Start runs the HTTP server on the given listener (blocking). It returns quietly when stopped via StopHTTP.
 func (s *Server) Start(listener net.Listener) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -224,8 +224,8 @@ func (s *Server) Start(listener net.Listener) {
 	}
 }
 
-// StopHTTP는 새 요청을 받지 않도록 HTTP 서버를 닫고, 진행 중인 요청을 timeout까지 기다린다.
-// 종료 경로에서 후처리 정리 전에 호출해 그 사이 업로드 요청이 들어오지 않게 한다. Start 전이면 아무것도 하지 않는다.
+// StopHTTP closes the HTTP server to new requests and waits up to timeout for in-flight ones.
+// Call it on shutdown before draining post-processing so no uploads arrive in between. It is a no-op before Start.
 func (s *Server) StopHTTP(timeout time.Duration) {
 	s.httpMu.Lock()
 	server := s.httpServer
@@ -236,16 +236,16 @@ func (s *Server) StopHTTP(timeout time.Duration) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	if err := server.Shutdown(ctx); err != nil {
-		logging.Warn("[Server] HTTP 종료 대기 초과: %v", err)
+		logging.Warn("[Server] HTTP shutdown wait exceeded: %v", err)
 	}
 }
 
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
-	// 루트 및 뷰어 대상 파일 경로는 모두 index.html을 서빙한다.
-	// 이를 통해 "/docs/guide.md" 같은 deep-link 로 새로고침해도 SPA가 해당 파일을 열 수 있다.
-	// (/static/ 과 /api/ 경로는 별도 핸들러가 먼저 처리하므로 여기로 오지 않는다.)
+	// The root and viewable file paths all serve index.html.
+	// This lets the SPA open the file even when reloading a deep link like "/docs/guide.md".
+	// (/static/ and /api/ paths are handled first by their own handlers and never reach here.)
 	if r.URL.Path != rootPath && !s.isDeepLinkRequest(r) {
-		// 마크다운 안에서 참조되는 이미지/기타 에셋을 디스크에서 직접 서빙한다.
+		// Serve images and other assets referenced from Markdown directly from disk.
 		if s.serveAsset(w, r) {
 			return
 		}
@@ -261,10 +261,10 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(data)
 }
 
-// isDeepLinkRequest는 SPA deep-link 로 취급할 요청인지 반환한다.
-// .md는 두 모드 공통이다. 그 외 뷰어 대상 파일은 folder 모드의 최상위 문서 탐색
-// 요청일 때만 deep-link 로 취급하여, 마크다운 인라인 HTML이 참조하는 에셋이나
-// curl 직접 요청은 기존처럼 원본 파일로 서빙되게 한다.
+// isDeepLinkRequest reports whether a request should be treated as an SPA deep link.
+// .md applies in both modes. Other viewable files are treated as deep links only for
+// top-level document navigations in folder mode, so assets referenced by inline HTML in Markdown
+// and direct curl requests are still served as the original file.
 func (s *Server) isDeepLinkRequest(r *http.Request) bool {
 	if IsMarkdownPath(r.URL.Path) {
 		return true
@@ -275,8 +275,8 @@ func (s *Server) isDeepLinkRequest(r *http.Request) bool {
 	return isDocumentRequest(r)
 }
 
-// isDocumentRequest는 브라우저의 최상위 문서 탐색 요청인지 판별한다.
-// Sec-Fetch-Dest 미지원 클라이언트는 Accept 헤더로 근사 판별한다.
+// isDocumentRequest reports whether a request is a top-level browser document navigation.
+// For clients without Sec-Fetch-Dest, the Accept header is used as an approximation.
 func isDocumentRequest(r *http.Request) bool {
 	if dest := r.Header.Get(secFetchDestHeader); dest != "" {
 		return dest == secFetchDestDocument
@@ -295,9 +295,9 @@ func (s *Server) handleMode(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, info)
 }
 
-// handleTree는 folder 모드에서 요청한 디렉토리(?path=, 비우면 루트)의 1레벨 목록을 반환한다.
-// 사이드바가 폴더를 펼칠 때마다 호출하므로 전체 트리를 재귀 스캔하지 않는다.
-// 오류 응답은 서버 경로가 노출되지 않도록 일반 메시지로 답한다.
+// handleTree returns the one-level listing of the requested directory (?path=, empty for root) in folder mode.
+// The sidebar calls it each time a folder is expanded, so the whole tree is not scanned recursively.
+// Error responses use generic messages so server paths are not exposed.
 func (s *Server) handleTree(w http.ResponseWriter, r *http.Request) {
 	if s.mode != ModeFolder {
 		http.Error(w, "tree is only available in folder mode", http.StatusBadRequest)
@@ -315,7 +315,7 @@ func (s *Server) handleTree(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, tree)
 }
 
-// handleFile은 folder 모드에서 상대 경로의 파일을 읽어 반환한다.
+// handleFile reads and returns a file by relative path in folder mode.
 func (s *Server) handleFile(w http.ResponseWriter, r *http.Request) {
 	if s.mode != ModeFolder {
 		http.Error(w, "file API is only available in folder mode", http.StatusBadRequest)
@@ -336,8 +336,8 @@ func (s *Server) handleFile(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(content)
 }
 
-// handleSelect는 folder 모드에서 현재 뷰의 활성 파일을 서버 측에 알려준다.
-// 이후 파일 변경 감시 결과는 이 파일에 한해 WS로 브로드캐스트된다.
+// handleSelect tells the server which file is active in the current view (folder mode).
+// From then on, file change events are broadcast over WS for this file only.
 func (s *Server) handleSelect(w http.ResponseWriter, r *http.Request) {
 	if s.mode != ModeFolder {
 		http.Error(w, "select API is only available in folder mode", http.StatusBadRequest)
@@ -358,23 +358,23 @@ func (s *Server) handleSelect(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// handleRecording은 브라우저가 녹화 종료 시 업로드하는 오디오+이벤트 메타를 저장한다.
-// 저장 위치는 folder 모드면 루트, file 모드면 대상 파일의 디렉토리이다.
+// handleRecording saves the audio and event metadata the browser uploads when a recording ends.
+// It is saved under the root in folder mode, or the target file's directory in file mode.
 func (s *Server) handleRecording(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, methodNotAllowedMessage, http.StatusMethodNotAllowed)
 		return
 	}
-	// 크로스오리진 페이지의 임의 업로드를 차단한다 (WS Origin 검증과 동일 정책).
-	// multipart POST는 preflight가 없으므로 다른 localhost 포트의 페이지도 여기서 막아야 한다.
+	// Block arbitrary uploads from cross-origin pages (same policy as the WS Origin check).
+	// Multipart POSTs have no preflight, so pages on other localhost ports must be blocked here too.
 	if !isSameOrigin(r) {
-		logging.Warn("[Recording] 크로스오리진 업로드 거부: %s", r.Header.Get(originHeader))
+		logging.Warn("[Recording] rejected cross-origin upload: %s", r.Header.Get(originHeader))
 		http.Error(w, forbiddenOriginMessage, http.StatusForbidden)
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxRecordingBytes)
 	if err := r.ParseMultipartForm(recordingFormMemory); err != nil {
-		logging.Warn("[Recording] multipart 파싱 실패: %v", err)
+		logging.Warn("[Recording] multipart parse failed: %v", err)
 		http.Error(w, "invalid multipart form: "+err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -400,17 +400,17 @@ func (s *Server) handleRecording(w http.ResponseWriter, r *http.Request) {
 	dir, audioName, err := SaveRecording(base, audio, header.Header.Get("Content-Type"), meta, time.Now())
 	eventCount, eventsSummary := summarizeRecordingEvents(meta)
 	if err != nil {
-		logging.Error("[Recording] 저장 실패: %v", err)
+		logging.Error("[Recording] save failed: %v", err)
 		logging.LogRecordingUpload(string(s.mode), "-", header.Filename, header.Size,
 			eventCount, eventsSummary, err.Error())
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	logging.Info("[Recording] 저장: %s (%s %d bytes, 이벤트 %d개)", dir, audioName, header.Size, eventCount)
+	logging.Info("[Recording] saved: %s (%s %d bytes, %d events)", dir, audioName, header.Size, eventCount)
 	warnIfAudioUnusable(filepath.Join(dir, audioName))
 	logging.LogRecordingUpload(string(s.mode), dir, audioName, header.Size, eventCount, eventsSummary, "")
 
-	// 후처리(전사 가능 시 전사 → prompt.txt)를 백그라운드로 시작한다.
+	// Start post-processing (transcription if possible → prompt.txt) in the background.
 	s.startPipeline(dir)
 
 	writeJSON(w, http.StatusOK, RecordingResult{
@@ -422,11 +422,11 @@ func (s *Server) handleRecording(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// startPipeline은 후처리를 백그라운드로 시작한다 (업로드 응답은 즉시 돌려준다).
+// startPipeline starts post-processing in the background (the upload response returns immediately).
 func (s *Server) startPipeline(dir string) {
 	id := filepath.Base(dir)
 	s.setJob(&TranscribeJob{ID: id, State: TranscribeStateRunning, Dir: dir})
-	logging.Info("[Pipeline] 후처리 시작: %s", id)
+	logging.Info("[Pipeline] post-processing started: %s", id)
 	s.pending.Add(1)
 	go func() {
 		defer s.pending.Done()
@@ -436,16 +436,16 @@ func (s *Server) startPipeline(dir string) {
 		s.completion.complete(job)
 		s.setJob(job)
 		if job.State == TranscribeStateError {
-			logging.Error("[Pipeline] 후처리 실패 (%s): %s", id, job.Error)
-			fmt.Fprintf(os.Stderr, "후처리 실패 (%s): %s\n", id, job.Error)
+			logging.Error("[Pipeline] post-processing failed (%s): %s", id, job.Error)
+			fmt.Fprintf(os.Stderr, "Post-processing failed (%s): %s\n", id, job.Error)
 			return
 		}
-		logging.Info("[Pipeline] 후처리 완료: %s → %s", id, job.Prompt)
-		fmt.Printf("완료 — 프롬프트 저장: %s\n", job.Prompt)
+		logging.Info("[Pipeline] post-processing complete: %s → %s", id, job.Prompt)
+		fmt.Printf("Done — prompt saved: %s\n", job.Prompt)
 	}()
 }
 
-// relToRoot는 folder 모드에서 루트 아래 경로를 슬래시 상대 경로로 바꾼다 (뷰어에서 바로 열기용). 그 외엔 빈 문자열.
+// relToRoot converts a path under the root to a slash-separated relative path in folder mode (for opening directly in the viewer). Otherwise it returns an empty string.
 func (s *Server) relToRoot(abs string) string {
 	if s.mode != ModeFolder || abs == "" {
 		return ""
@@ -457,12 +457,12 @@ func (s *Server) relToRoot(abs string) string {
 	return filepath.ToSlash(rel)
 }
 
-// WaitPipelines는 진행 중인 후처리가 모두 끝날 때까지 기다린다 (종료 경로·테스트 정리용).
+// WaitPipelines waits until all in-flight post-processing finishes (for shutdown and test cleanup).
 func (s *Server) WaitPipelines() {
 	s.pending.Wait()
 }
 
-// PipelinesPending은 아직 끝나지 않은 후처리가 있는지 반환한다 (종료 안내 출력용).
+// PipelinesPending reports whether any post-processing is still running (for the shutdown notice).
 func (s *Server) PipelinesPending() bool {
 	s.jobMu.Lock()
 	defer s.jobMu.Unlock()
@@ -481,8 +481,8 @@ func (s *Server) setJob(job *TranscribeJob) {
 	s.transcribeJobs[job.ID] = job
 }
 
-// handleRecordingStatus는 자동 전사 작업 상태를 반환한다.
-// ?id=<rec-...> 로 단건 조회, 없으면 전체 목록을 반환한다.
+// handleRecordingStatus returns auto-transcription job status.
+// ?id=<rec-...> returns a single job; without it, the full list is returned.
 func (s *Server) handleRecordingStatus(w http.ResponseWriter, r *http.Request) {
 	s.jobMu.Lock()
 	defer s.jobMu.Unlock()
@@ -502,8 +502,8 @@ func (s *Server) handleRecordingStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, jobs)
 }
 
-// handleRecordingFile는 이 프로세스가 생성한 결과 파일만 제공한다.
-// 녹화가 프로젝트 밖에 저장되더라도 완료 토스트에서 결과를 열 수 있다.
+// handleRecordingFile serves only result files created by this process.
+// This lets the completion toast open results even when the recording is stored outside the project.
 func (s *Server) handleRecordingFile(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, methodNotAllowedMessage, http.StatusMethodNotAllowed)
@@ -569,8 +569,8 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	c := &Client{conn: conn, send: make(chan []byte, clientSendBuffer)}
 	s.hub.Register(c)
 
-	// file 모드는 연결 즉시 초기 컨텐츠를 push한다.
-	// PDF는 바이너리라 WS 텍스트 프레임으로 보내지 않는다 (클라이언트가 URL로 직접 읽음).
+	// In file mode, the initial content is pushed as soon as a client connects.
+	// PDFs are binary, so they are not sent as WS text frames (the client reads them by URL).
 	if s.mode == ModeFile && !IsPDFPath(s.filePath) {
 		if content, err := os.ReadFile(s.filePath); err == nil {
 			c.send <- content
@@ -602,9 +602,9 @@ func (s *Server) readPump(c *Client) {
 	}
 }
 
-// serveAsset은 마크다운에서 참조하는 이미지/일반 파일을 디스크에서 서빙한다.
-// folder 모드는 root 기준, file 모드는 파일이 위치한 디렉토리 기준이다.
-// 보안: 경로가 루트(또는 base dir)를 벗어나면 거부한다. .md는 SPA 라우팅을 위해 처리하지 않는다.
+// serveAsset serves images and other files referenced from Markdown from disk.
+// Paths are relative to root in folder mode, or to the file's directory in file mode.
+// Security: paths escaping the root (or base dir) are rejected. .md is left to SPA routing.
 func (s *Server) serveAsset(w http.ResponseWriter, r *http.Request) bool {
 	var base string
 	switch s.mode {
@@ -628,8 +628,8 @@ func (s *Server) serveAsset(w http.ResponseWriter, r *http.Request) bool {
 	if err != nil || info.IsDir() {
 		return false
 	}
-	// ServeFile은 index.html 요청을 디렉토리 URL로 리다이렉트한다.
-	// HTML 미리보기에서는 원본 문서를 그대로 반환해야 중첩 뷰어가 생기지 않는다.
+	// ServeFile redirects index.html requests to the directory URL.
+	// HTML preview must return the original document as-is to avoid a nested viewer.
 	if ext := strings.ToLower(filepath.Ext(candidate)); ext == ".html" || ext == ".htm" {
 		file, err := os.Open(candidate)
 		if err != nil {

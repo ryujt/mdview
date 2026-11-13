@@ -9,14 +9,14 @@ export const BlockType = {
   EMPTY: 'empty'
 };
 
-// ```text 펜스는 "안의 코드 예시를 통째로 보여주는" 용도라서, 내부의
-// ```xxx(정보 문자열 있는 펜스)를 중첩 열림으로 세고 맨몸 ```를 닫힘으로 빼서
-// 짝이 맞아떨어지는 닫는 펜스까지를 하나의 영역으로 취급한다.
+// A ```text fence is meant to "show the code examples inside it verbatim", so inner
+// ```xxx fences (with an info string) count as nested openers and bare ``` as closers,
+// and everything up to the matching closing fence is treated as one region.
 export function isTextFenceOpener(line) {
   return /^(`{3,}|~{3,})[ \t]*text[ \t]*$/i.test(line);
 }
 
-// lines[openIndex]가 text 펜스 여는 줄일 때 닫는 줄의 인덱스를 반환한다 (미종결이면 -1).
+// When lines[openIndex] opens a text fence, returns the index of its closing line (-1 if unclosed).
 export function findTextFenceClose(lines, openIndex) {
   let depth = 0;
   for (let i = openIndex + 1; i < lines.length; i++) {

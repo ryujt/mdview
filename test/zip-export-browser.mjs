@@ -72,13 +72,13 @@ async function run() {
   };
   const fence = (language, body) => '```' + language + '\n' + body + '\n```';
   const source = [
-    '# CLI ZIP 원문\n\n설명  **그대로** 유지합니다.',
-    fence('navigation', '홈 --> (/저장) : 저장\n(/저장) --> <완료> : 성공'),
-    fence('state', '<s> --> (대기)\n(대기) --> <e> : 종료'),
+    '# CLI ZIP source\n\nThe description  stays **exactly** as is.',
+    fence('navigation', 'Home --> (/save) : save\n(/save) --> <Done> : success'),
+    fence('state', '<s> --> (Waiting)\n(Waiting) --> <e> : finish'),
     fence('mermaid', 'graph LR\nOriginal --> Preserved'),
     '---',
-    fence('jobflow', 'orchestrator: 주문\nObject: 주문, 결제\n주문.시작 --> 결제.승인\n결제.승인.result --> 주문.완료'),
-    fence('jobflow', 'Object: 사용자, 서버\n사용자.조회 --> 서버.검색').split('\n').map(line => '> ' + line).join('\n'),
+    fence('jobflow', 'orchestrator: Order\nObject: Order, Payment\nOrder.Start --> Payment.Approve\nPayment.Approve.result --> Order.Complete'),
+    fence('jobflow', 'Object: User, Server\nUser.Query --> Server.Search').split('\n').map(line => '> ' + line).join('\n'),
   ].join('\n\n') + '\n';
   let activePage = null;
   try {
@@ -116,7 +116,7 @@ async function run() {
           await page.keyboard.press('Escape');
           await page.locator('#tree .tree-file[data-path="document.md"]').click();
         }
-        await page.locator('#preview').getByRole('heading', { name: 'CLI ZIP 원문', exact: true }).waitFor();
+        await page.locator('#preview').getByRole('heading', { name: 'CLI ZIP source', exact: true }).waitFor();
         await page.waitForFunction(() => document.querySelectorAll('#preview .mermaid[data-processed="true"] svg').length === 3, null, { timeout: 30000 });
         await page.locator('#export-menu-button').focus();
         await page.keyboard.press('ArrowDown');
@@ -146,8 +146,8 @@ async function run() {
         if (!markdown) throw new Error('ZIP is missing document.md');
         check(!/^\s*(?:> )?```(?:navigation|state|jobflow)\s*$/m.test(markdown), mode + ': custom diagram fences become standard Markdown content');
         check((markdown.match(/^```mermaid$/gm) || []).length === 3, mode + ': navigation/state convert to Mermaid and original Mermaid remains');
-        check(markdown.startsWith('# CLI ZIP 원문\n\n설명  **그대로** 유지합니다.'), mode + ': ordinary Markdown remains byte-exact');
-        const references = [...markdown.matchAll(/!\[잡플로우 \d+\]\((images\/[^)]+)\)/g)].map(match => match[1]);
+        check(markdown.startsWith('# CLI ZIP source\n\nThe description  stays **exactly** as is.'), mode + ': ordinary Markdown remains byte-exact');
+        const references = [...markdown.matchAll(/!\[Jobflow \d+\]\((images\/[^)]+)\)/g)].map(match => match[1]);
         const imageFiles = Object.keys(zip.files).filter(name => !zip.files[name].dir && name.startsWith('images/'));
         check(references.length === 2 && new Set(references).size === 2 && JSON.stringify([...references].sort()) === JSON.stringify(imageFiles.sort()), mode + ': both full-document PNGs are linked to matching packaged files', { references, imageFiles });
         for (const filename of references) {
@@ -192,27 +192,27 @@ async function run() {
         }, { markdown, imageData });
         check(plainViewer.mermaids === 3 && plainViewer.images === 2 && plainViewer.customCode === 0, mode + ': package renders in a plain Markdown + Mermaid viewer', plainViewer);
         check(await fs.readFile(join(fixtures, 'document.md'), 'utf8') === source, mode + ': exporting does not change the source file');
-        const changed = source.replace('CLI ZIP 원문', 'CLI ZIP 변경됨') + '\n최신 변경 포함\n';
+        const changed = source.replace('CLI ZIP source', 'CLI ZIP changed') + '\nIncludes latest change\n';
         await fs.writeFile(join(fixtures, 'document.md'), changed);
-        await page.locator('#preview').getByRole('heading', { name: 'CLI ZIP 변경됨', exact: true }).waitFor();
+        await page.locator('#preview').getByRole('heading', { name: 'CLI ZIP changed', exact: true }).waitFor();
         const updatedZip = await downloadZip();
         const updated = await updatedZip.file('document.md').async('string');
-        check(updated.includes('CLI ZIP 변경됨') && updated.endsWith('\n최신 변경 포함\n'), mode + ': ZIP includes the latest WebSocket file change');
-        const invalid = '# CLI ZIP 잘못된 잡플로우\n\n' + fence('jobflow', 'no objects or actions') + '\n';
+        check(updated.includes('CLI ZIP changed') && updated.endsWith('\nIncludes latest change\n'), mode + ': ZIP includes the latest WebSocket file change');
+        const invalid = '# CLI ZIP invalid jobflow\n\n' + fence('jobflow', 'no objects or actions') + '\n';
         await fs.writeFile(join(fixtures, 'document.md'), invalid);
-        await page.locator('#preview').getByRole('heading', { name: 'CLI ZIP 잘못된 잡플로우', exact: true }).waitFor();
+        await page.locator('#preview').getByRole('heading', { name: 'CLI ZIP invalid jobflow', exact: true }).waitFor();
         await page.locator('#export-menu-button').click();
         const beforeFailure = downloadEvents;
         await page.locator('#export-zip').click();
-        await page.getByText('ZIP 생성 실패:', { exact: false }).waitFor();
+        await page.getByText('ZIP creation failed:', { exact: false }).waitFor();
         await page.locator('#export-menu-button').click();
         check(await page.locator('#export-zip').getAttribute('aria-disabled') !== 'true', mode + ': failed PNG export releases the menu control');
         check(downloadEvents === beforeFailure, mode + ': failed PNG export does not download a broken ZIP');
         await page.keyboard.press('Escape');
         await fs.writeFile(join(fixtures, 'document.md'), changed);
-        await page.locator('#preview').getByRole('heading', { name: 'CLI ZIP 변경됨', exact: true }).waitFor();
+        await page.locator('#preview').getByRole('heading', { name: 'CLI ZIP changed', exact: true }).waitFor();
         const recovered = await downloadZip();
-        check((await recovered.file('document.md').async('string')).includes('CLI ZIP 변경됨'), mode + ': a valid export succeeds after PNG failure');
+        check((await recovered.file('document.md').async('string')).includes('CLI ZIP changed'), mode + ': a valid export succeeds after PNG failure');
         if (mode === 'folder') {
           await page.locator('#tree .tree-file[data-path="code.js"]').click();
           await page.locator('#preview .code-viewer').waitFor();

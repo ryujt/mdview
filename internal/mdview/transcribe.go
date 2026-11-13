@@ -18,42 +18,42 @@ import (
 	"github.com/ryu/tools-camp/cli/mdview/internal/mdview/logging"
 )
 
-// 전사(오디오 → 텍스트) 관련 정책 상수.
-// 기본 백엔드는 OpenAI Audio Transcriptions API의 whisper-1 모델이며
-// (설정 파일 또는 OPENAI_API_KEY의 API 키 필요), verbose_json 응답으로
-// 세그먼트 타임스탬프를 받아 이벤트 타임라인과 병합한다.
-// JSON 전사 모델은 시간 정보 없는 전체 전사문으로 저장한다.
-// -model large-v3 등 OpenAI 모델 이외의 이름을 주면 로컬 whisper CLI로 실행한다.
+// Policy constants for transcription (audio → text).
+// The default backend is the whisper-1 model of the OpenAI Audio Transcriptions API
+// (requires an API key from the config file or OPENAI_API_KEY); segment timestamps
+// from the verbose_json response are merged with the event timeline.
+// JSON transcription models are stored as a full transcript without timing.
+// Passing a non-OpenAI model name such as -model large-v3 runs the local whisper CLI instead.
 const (
-	DefaultTranscribeModel = "whisper-1" // OpenAI API 모델
-	localWhisperDefault    = "large-v3"  // 로컬 CLI 권장 모델
+	DefaultTranscribeModel = "whisper-1" // OpenAI API model
+	localWhisperDefault    = "large-v3"  // recommended model for the local CLI
 	whisperModelCanonical  = "openai/whisper-large-v3"
 	whisperCmdName         = "whisper"
 	transcriptFileName     = "transcript.json"
 
-	// OpenAI Audio API 요청 정책
+	// OpenAI Audio API request policy
 	openaiRequestTimeout = 10 * time.Minute
 	openaiErrorBodyLimit = 500
-	maxAPIAudioBytes     = 25 << 20 // OpenAI Audio API 업로드 상한 (25MB)
+	maxAPIAudioBytes     = 25 << 20 // OpenAI Audio API upload limit (25MB)
 )
 
-// openaiAPIBase는 OpenAI API 엔드포인트이다 (테스트에서 교체).
+// openaiAPIBase is the OpenAI API endpoint (replaced in tests).
 var openaiAPIBase = "https://api.openai.com/v1"
 
-// whisperInstallGuide는 whisper CLI 부재 시 안내 문구이다.
-const whisperInstallGuide = `whisper CLI를 찾을 수 없습니다.
-설치 방법:
-  pip install -U openai-whisper   # openai/whisper-large-v3 모델 사용
-  brew install ffmpeg             # 오디오 디코딩에 필요 (macOS)`
+// whisperInstallGuide is the guidance shown when the whisper CLI is missing.
+const whisperInstallGuide = `whisper CLI not found.
+To install:
+  pip install -U openai-whisper   # uses the openai/whisper-large-v3 model
+  brew install ffmpeg             # required for audio decoding (macOS)`
 
-// TranscriptSegment는 Whisper가 출력한 발화 구간이다 (초 단위).
+// TranscriptSegment is a speech segment output by Whisper (in seconds).
 type TranscriptSegment struct {
 	Start float64 `json:"start"`
 	End   float64 `json:"end"`
 	Text  string  `json:"text"`
 }
 
-// WhisperResult는 whisper --output_format json 결과에서 사용하는 필드이다.
+// WhisperResult holds the fields used from whisper --output_format json output.
 type WhisperResult struct {
 	Text      string              `json:"text"`
 	Language  string              `json:"language"`
@@ -63,7 +63,7 @@ type WhisperResult struct {
 	} `json:"languages,omitempty"`
 }
 
-// RecordingEvent는 events.json에 기록된 단일 이벤트이다.
+// RecordingEvent is a single event recorded in events.json.
 type RecordingEvent struct {
 	T         int64   `json:"t"`
 	Type      string  `json:"type"`
@@ -76,16 +76,16 @@ type RecordingEvent struct {
 	PDF       *PDFRef `json:"pdf,omitempty"`
 }
 
-// PDFRef는 PDF 문서 내 참조 위치이다. 라인 번호가 없는 PDF는 페이지 번호와
-// 페이지 좌상단 기준 0~1 정규화 좌표(x, y)로 위치를 표현한다.
-// 좌표가 없는 이벤트(선택/복사)는 페이지 번호만 기록되므로 X/Y는 포인터로 구분한다.
+// PDFRef is a reference position within a PDF document. Since PDFs have no line numbers,
+// a position is expressed as a page number plus 0~1 normalized coordinates (x, y) from the page's top-left.
+// Events without coordinates (select/copy) record only the page number, so X/Y are pointers to tell them apart.
 type PDFRef struct {
 	Page int      `json:"page"`
 	X    *float64 `json:"x,omitempty"`
 	Y    *float64 `json:"y,omitempty"`
 }
 
-// RecordingMeta는 events.json 전체 구조이다.
+// RecordingMeta is the overall structure of events.json.
 type RecordingMeta struct {
 	Version    int              `json:"version"`
 	Mode       string           `json:"mode"`
@@ -98,9 +98,9 @@ type RecordingMeta struct {
 	Events     []RecordingEvent `json:"events"`
 }
 
-// TranscribeRecording은 녹화 디렉토리의 오디오를 전사해 transcript.json을 생성하는
-// Orchestrator이다. 이미 whisper JSON 결과가 있으면 재사용한다 (모델 재실행 비용 절약).
-// 프로세스 이벤트는 이 함수(오케스트레이터)에서만 기록하고, 워커는 결과만 반환한다.
+// TranscribeRecording is the Orchestrator that transcribes the audio in a recording directory
+// and produces transcript.json. An existing whisper JSON result is reused (saves re-running the model).
+// Process events are logged only here (the orchestrator); workers just return results.
 func TranscribeRecording(dir, model, lang string) (string, error) {
 	absDir, err := filepath.Abs(dir)
 	if err != nil {
@@ -108,93 +108,93 @@ func TranscribeRecording(dir, model, lang string) (string, error) {
 	}
 	audioPath, err := findRecordingAudio(absDir)
 	if err != nil {
-		logging.LogProcessEvent("execution", "step_err", "오디오 파일 탐색 실패", nil)
+		logging.LogProcessEvent("execution", "step_err", "failed to locate audio file", nil)
 		return "", err
 	}
-	logging.Info("[Transcribe] 대상 오디오: %s", audioPath)
-	logging.LogProcessEvent("execution", "step_ok", "오디오 파일 탐색: "+filepath.Base(audioPath), nil)
+	logging.Info("[Transcribe] target audio: %s", audioPath)
+	logging.LogProcessEvent("execution", "step_ok", "located audio file: "+filepath.Base(audioPath), nil)
 
 	resultPath := whisperResultPath(absDir, audioPath)
 	if _, err := os.Stat(resultPath); os.IsNotExist(err) {
 		started := time.Now()
 		if err := validateRecordingAudio(audioPath); err != nil {
-			logging.LogProcessEvent("execution", "step_err", "오디오 형식 검증 실패: "+err.Error(), nil)
+			logging.LogProcessEvent("execution", "step_err", "audio format validation failed: "+err.Error(), nil)
 			return "", err
 		}
 		if isAPIModel(model) {
 			apiKey, err := ResolveOpenAIKey()
 			if err != nil {
-				logging.LogProcessEvent("execution", "step_err", "API 키 없음", nil)
+				logging.LogProcessEvent("execution", "step_err", "no API key", nil)
 				return "", err
 			}
 			artifact, err := runWhisperAPI(resultPath, audioPath, model, lang, apiKey)
 			elapsed := float64(time.Since(started).Milliseconds())
 			if err != nil {
-				logging.LogProcessEvent("execution", "step_err", model+" API 전사 실패",
+				logging.LogProcessEvent("execution", "step_err", model+" API transcription failed",
 					&logging.EventOpts{ArtifactPath: artifact, DurationMs: elapsed})
 				return "", err
 			}
 			logging.LogProcessEvent("execution", "step_ok",
-				fmt.Sprintf("%s API 전사 (%.1fs)", model, elapsed/1000),
+				fmt.Sprintf("%s API transcription (%.1fs)", model, elapsed/1000),
 				&logging.EventOpts{ArtifactPath: artifact, DurationMs: elapsed})
 		} else {
 			artifact, err := runWhisper(absDir, audioPath, model, lang)
 			elapsed := float64(time.Since(started).Milliseconds())
 			if err != nil {
-				logging.LogProcessEvent("execution", "step_err", "로컬 whisper 전사 실패",
+				logging.LogProcessEvent("execution", "step_err", "local whisper transcription failed",
 					&logging.EventOpts{ArtifactPath: artifact, DurationMs: elapsed})
 				return "", err
 			}
 			logging.LogProcessEvent("execution", "step_ok",
-				fmt.Sprintf("로컬 whisper 전사 (%.1fs)", elapsed/1000),
+				fmt.Sprintf("local whisper transcription (%.1fs)", elapsed/1000),
 				&logging.EventOpts{ArtifactPath: artifact, DurationMs: elapsed})
 		}
 	} else {
-		fmt.Printf("기존 전사 결과 재사용: %s\n", resultPath)
-		logging.Info("[Transcribe] 기존 전사 결과 재사용: %s", resultPath)
-		logging.LogProcessEvent("execution", "step_ok", "기존 전사 결과 재사용", nil)
+		fmt.Printf("Reusing existing transcription result: %s\n", resultPath)
+		logging.Info("[Transcribe] reusing existing transcription result: %s", resultPath)
+		logging.LogProcessEvent("execution", "step_ok", "reused existing transcription result", nil)
 	}
 
 	result, err := loadWhisperResult(resultPath)
 	if err != nil {
-		logging.LogProcessEvent("execution", "step_err", "전사 결과 파싱 실패", nil)
+		logging.LogProcessEvent("execution", "step_err", "failed to parse transcription result", nil)
 		return "", err
 	}
 	meta, err := loadRecordingMeta(absDir)
 	if err != nil {
-		// 이벤트 메타가 없어도 전사 문서는 생성한다.
-		fmt.Fprintf(os.Stderr, "경고: %s 없이 전사만 수행합니다 (%v)\n", eventsFileName, err)
-		logging.Warn("[Transcribe] %s 없음: %v", eventsFileName, err)
+		// Generate the transcript even without event metadata.
+		fmt.Fprintf(os.Stderr, "warning: transcribing without %s (%v)\n", eventsFileName, err)
+		logging.Warn("[Transcribe] %s missing: %v", eventsFileName, err)
 		meta = &RecordingMeta{}
 	}
 
 	doc, err := buildTranscriptJSON(meta, result, model)
 	if err != nil {
-		logging.LogProcessEvent("synthesis", "error", "transcript.json 생성 실패", nil)
+		logging.LogProcessEvent("synthesis", "error", "failed to build transcript.json", nil)
 		return "", fmt.Errorf("transcript build error: %w", err)
 	}
 	outPath := filepath.Join(absDir, transcriptFileName)
 	if err := os.WriteFile(outPath, doc, recordingFilePerm); err != nil {
-		logging.LogProcessEvent("synthesis", "error", "transcript.json 저장 실패", nil)
+		logging.LogProcessEvent("synthesis", "error", "failed to save transcript.json", nil)
 		return "", fmt.Errorf("transcript write error: %w", err)
 	}
 	statePath := logging.LogStateSnapshot("transcribe-meta", map[string]any{
 		"dir": absDir, "audio": filepath.Base(audioPath), "language": result.Language,
 		"segments": len(result.Segments), "events": len(meta.Events), "durationMs": meta.DurationMs,
 	})
-	logging.Info("[Transcribe] 문서 생성: %s (발화 %d개, 이벤트 %d개)", outPath, len(result.Segments), len(meta.Events))
+	logging.Info("[Transcribe] document created: %s (%d segments, %d events)", outPath, len(result.Segments), len(meta.Events))
 	logging.LogProcessEvent("synthesis", "end",
-		fmt.Sprintf("타임라인 병합: 발화 %d개 + 이벤트 %d개", len(result.Segments), len(meta.Events)),
+		fmt.Sprintf("timeline merged: %d segments + %d events", len(result.Segments), len(meta.Events)),
 		&logging.EventOpts{ArtifactPath: statePath})
 	return outPath, nil
 }
 
-// TranscribeSkipReason은 자동 전사를 생략해야 하는 이유를 반환한다 (빈 문자열이면 전사 가능).
-// 이미 whisper 결과가 있으면 키·크기와 무관하게 재사용할 수 있고, 로컬 CLI 모델은 API 제약을 받지 않는다.
+// TranscribeSkipReason returns why automatic transcription should be skipped (empty means it can run).
+// An existing whisper result can be reused regardless of key or size, and local CLI models are not bound by API limits.
 func TranscribeSkipReason(dir, model string) string {
 	audioPath, err := findRecordingAudio(dir)
 	if err != nil {
-		return "오디오 파일이 없습니다"
+		return "no audio file"
 	}
 	if _, err := os.Stat(whisperResultPath(dir, audioPath)); err == nil {
 		return ""
@@ -204,17 +204,17 @@ func TranscribeSkipReason(dir, model string) string {
 	}
 	if _, err := ResolveOpenAIKey(); err != nil {
 		if !errors.Is(err, ErrNoOpenAIKey) {
-			return "OpenAI API 키를 읽을 수 없습니다: " + err.Error()
+			return "cannot read the OpenAI API key: " + err.Error()
 		}
 		return ErrNoOpenAIKey.Error()
 	}
 	if size := fileSize(audioPath); size > maxAPIAudioBytes {
-		return fmt.Sprintf("오디오가 %dMB로 API 업로드 상한(%dMB)을 초과합니다", size>>20, maxAPIAudioBytes>>20)
+		return fmt.Sprintf("audio is %dMB, exceeding the API upload limit (%dMB)", size>>20, maxAPIAudioBytes>>20)
 	}
 	return ""
 }
 
-// findRecordingAudio는 녹화 디렉토리에서 오디오 파일(audio.*)을 찾는다.
+// findRecordingAudio finds the audio file (audio.*) in a recording directory.
 func findRecordingAudio(dir string) (string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -229,10 +229,10 @@ func findRecordingAudio(dir string) (string, error) {
 			return filepath.Join(dir, name), nil
 		}
 	}
-	return "", fmt.Errorf("오디오 파일(%s.*)을 찾을 수 없습니다: %s", audioFileBase, dir)
+	return "", fmt.Errorf("audio file (%s.*) not found: %s", audioFileBase, dir)
 }
 
-// whisperResultName은 whisper가 생성하는 JSON 결과 파일 이름이다 (<audio 베이스>.json).
+// whisperResultName is the name of the JSON result file whisper produces (<audio base>.json).
 func whisperResultName() string {
 	return audioFileBase + ".json"
 }
@@ -242,7 +242,7 @@ func whisperResultPath(dir, audioPath string) string {
 	return filepath.Join(dir, base+".json")
 }
 
-// isAPIModel은 OpenAI Audio API로 전사할 모델인지 반환한다.
+// isAPIModel reports whether the model is transcribed via the OpenAI Audio API.
 func isAPIModel(model string) bool {
 	for _, option := range transcriptionModels() {
 		if option.ID == model {
@@ -252,11 +252,11 @@ func isAPIModel(model string) bool {
 	return false
 }
 
-// runWhisperAPI는 OpenAI Audio Transcriptions API로 전사를 실행하고
-// whisper-1은 verbose_json, 그 밖의 API 모델은 json 응답을 저장한다.
-// 반환값: whisper/ 카테고리에 저장된 상세 로그 아티팩트 경로 (없으면 빈 문자열).
+// runWhisperAPI runs transcription via the OpenAI Audio Transcriptions API and stores
+// the verbose_json response for whisper-1, or the json response for other API models.
+// Returns: path of the detailed log artifact saved under the whisper/ category (empty if none).
 func runWhisperAPI(resultPath, audioPath, model, lang, apiKey string) (string, error) {
-	fmt.Printf("전사 실행: %s (%s)\n", modelDisplayName(model), filepath.Base(audioPath))
+	fmt.Printf("Transcribing: %s (%s)\n", modelDisplayName(model), filepath.Base(audioPath))
 	started := time.Now()
 	audioBytes := fileSize(audioPath)
 	uploadName := transcribeUploadName(audioPath)
@@ -266,9 +266,9 @@ func runWhisperAPI(resultPath, audioPath, model, lang, apiKey string) (string, e
 	}
 	requestSummary := fmt.Sprintf(
 		"POST %s/audio/transcriptions\nmodel=%s\nresponse_format=%s\nlanguage=%s\nfile=%s (%d bytes)",
-		openaiAPIBase, model, responseFormat, orDefault(lang, "(자동 감지)"), uploadName, audioBytes)
+		openaiAPIBase, model, responseFormat, orDefault(lang, "(auto-detect)"), uploadName, audioBytes)
 
-	// 실패 시에도 상세 로그를 남기는 헬퍼
+	// Helper that writes a detailed log even on failure
 	fail := func(err error) (string, error) {
 		artifact := logging.LogWhisperCall("openai-api", model, lang, filepath.Base(audioPath),
 			audioBytes, requestSummary, "", "", float64(time.Since(started).Milliseconds()), err.Error())
@@ -277,7 +277,7 @@ func runWhisperAPI(resultPath, audioPath, model, lang, apiKey string) (string, e
 
 	audio, err := os.Open(audioPath)
 	if err != nil {
-		return fail(fmt.Errorf("오디오 열기 실패: %w", err))
+		return fail(fmt.Errorf("failed to open audio: %w", err))
 	}
 	defer audio.Close()
 
@@ -288,7 +288,7 @@ func runWhisperAPI(resultPath, audioPath, model, lang, apiKey string) (string, e
 		return fail(err)
 	}
 	if _, err := io.Copy(part, audio); err != nil {
-		return fail(fmt.Errorf("오디오 읽기 실패: %w", err))
+		return fail(fmt.Errorf("failed to read audio: %w", err))
 	}
 	_ = mw.WriteField("model", model)
 	_ = mw.WriteField("response_format", responseFormat)
@@ -316,28 +316,28 @@ func runWhisperAPI(resultPath, audioPath, model, lang, apiKey string) (string, e
 	client := &http.Client{Timeout: openaiRequestTimeout}
 	res, err := client.Do(req)
 	if err != nil {
-		return fail(fmt.Errorf("OpenAI API 요청 실패: %w", err))
+		return fail(fmt.Errorf("OpenAI API request failed: %w", err))
 	}
 	defer res.Body.Close()
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		return fail(fmt.Errorf("OpenAI API 응답 읽기 실패: %w", err))
+		return fail(fmt.Errorf("failed to read OpenAI API response: %w", err))
 	}
 	if res.StatusCode != http.StatusOK {
 		detail := strings.ReplaceAll(string(body), apiKey, "[redacted]")
 		if len(detail) > openaiErrorBodyLimit {
 			detail = detail[:openaiErrorBodyLimit] + "…"
 		}
-		return fail(fmt.Errorf("OpenAI API 오류 (HTTP %d): %s", res.StatusCode, detail))
+		return fail(fmt.Errorf("OpenAI API error (HTTP %d): %s", res.StatusCode, detail))
 	}
-	// 유효성 검사를 겸해 파싱한 뒤 원본 응답을 그대로 저장한다 (로컬 whisper 결과와 동일 취급).
+	// Parse to validate, then save the raw response as-is (treated the same as a local whisper result).
 	var check WhisperResult
 	if err := json.Unmarshal(body, &check); err != nil {
-		return fail(fmt.Errorf("OpenAI API 응답 파싱 실패: %w", err))
+		return fail(fmt.Errorf("failed to parse OpenAI API response: %w", err))
 	}
 	if err := os.WriteFile(resultPath, body, recordingFilePerm); err != nil {
-		return fail(fmt.Errorf("전사 결과 저장 실패: %w", err))
+		return fail(fmt.Errorf("failed to save transcription result: %w", err))
 	}
 
 	elapsed := float64(time.Since(started).Milliseconds())
@@ -362,8 +362,8 @@ func orDefault(s, def string) string {
 	return s
 }
 
-// runWhisper는 openai-whisper CLI로 전사를 실행한다 (블로킹, 진행 로그 passthrough).
-// 반환값: whisper/ 카테고리에 저장된 상세 로그 아티팩트 경로 (없으면 빈 문자열).
+// runWhisper runs transcription with the openai-whisper CLI (blocking, progress output passed through).
+// Returns: path of the detailed log artifact saved under the whisper/ category (empty if none).
 func runWhisper(dir, audioPath, model, lang string) (string, error) {
 	started := time.Now()
 	audioBytes := fileSize(audioPath)
@@ -376,7 +376,7 @@ func runWhisper(dir, audioPath, model, lang string) (string, error) {
 	bin, err := exec.LookPath(whisperCmdName)
 	if err != nil {
 		installErr := fmt.Errorf("%s", whisperInstallGuide)
-		return logCall(whisperCmdName+" (미설치)", installErr.Error()), installErr
+		return logCall(whisperCmdName+" (not installed)", installErr.Error()), installErr
 	}
 	args := []string{
 		audioPath,
@@ -389,12 +389,12 @@ func runWhisper(dir, audioPath, model, lang string) (string, error) {
 		args = append(args, "--language", lang)
 	}
 	cmdline := bin + " " + strings.Join(args, " ")
-	fmt.Printf("전사 실행: %s (%s)\n", modelDisplayName(model), filepath.Base(audioPath))
+	fmt.Printf("Transcribing: %s (%s)\n", modelDisplayName(model), filepath.Base(audioPath))
 	cmd := exec.Command(bin, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		runErr := fmt.Errorf("whisper 실행 실패: %w", err)
+		runErr := fmt.Errorf("whisper run failed: %w", err)
 		return logCall(cmdline, runErr.Error()), runErr
 	}
 	return logCall(cmdline, ""), nil
@@ -403,11 +403,11 @@ func runWhisper(dir, audioPath, model, lang string) (string, error) {
 func loadWhisperResult(path string) (*WhisperResult, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("whisper 결과 읽기 실패: %w", err)
+		return nil, fmt.Errorf("failed to read whisper result: %w", err)
 	}
 	var result WhisperResult
 	if err := json.Unmarshal(data, &result); err != nil {
-		return nil, fmt.Errorf("whisper 결과 파싱 실패: %w", err)
+		return nil, fmt.Errorf("failed to parse whisper result: %w", err)
 	}
 	if result.Language == "" && len(result.Languages) > 0 {
 		result.Language = result.Languages[0].Code
@@ -415,7 +415,7 @@ func loadWhisperResult(path string) (*WhisperResult, error) {
 	return &result, nil
 }
 
-// untimedSpeech는 시각을 제공하지 않는 모델의 전체 전사문이다.
+// untimedSpeech is the full transcript from a model that provides no timing.
 func untimedSpeech(result *WhisperResult) string {
 	if result == nil {
 		return ""
@@ -435,12 +435,12 @@ func loadRecordingMeta(dir string) (*RecordingMeta, error) {
 	}
 	var meta RecordingMeta
 	if err := json.Unmarshal(data, &meta); err != nil {
-		return nil, fmt.Errorf("%s 파싱 실패: %w", eventsFileName, err)
+		return nil, fmt.Errorf("failed to parse %s: %w", eventsFileName, err)
 	}
 	return &meta, nil
 }
 
-// modelDisplayName은 문서에 표기할 모델 이름을 반환한다.
+// modelDisplayName returns the model name shown in the document.
 func modelDisplayName(model string) string {
 	if isAPIModel(model) {
 		return model + " (OpenAI Audio API)"
@@ -453,12 +453,12 @@ func modelDisplayName(model string) string {
 	}
 }
 
-// buildTranscriptMarkdown은 발화 세그먼트와 문서 참조 이벤트를 시간순으로 병합해
-// AI가 파싱하기 쉬운 하나의 JSON 문서(transcript.json)를 만든다.
-// 발화(kind=speech)와 사용자 상호작용(kind=action)을 시간순 단일 타임라인으로 병합하고,
-// 각 항목의 의미를 guide 필드에 자체 기술한다.
+// buildTranscriptMarkdown merges speech segments and document reference events chronologically
+// into a single JSON document (transcript.json) that is easy for AI to parse.
+// Speech (kind=speech) and user interactions (kind=action) are merged into one chronological timeline,
+// and the meaning of each entry is self-described in the guide field.
 
-// transcriptDoc은 transcript.json의 최상위 구조이다.
+// transcriptDoc is the top-level structure of transcript.json.
 type transcriptDoc struct {
 	Version       int             `json:"version"`
 	Tool          string          `json:"tool"`
@@ -474,7 +474,7 @@ type transcriptDoc struct {
 	Timeline      []any           `json:"timeline"`
 }
 
-// transcriptGuide는 문서를 읽는 쪽(주로 AI)을 위한 스키마 설명이다.
+// transcriptGuide is a schema description for the reader of the document (mainly AI).
 type transcriptGuide struct {
 	Timeline string            `json:"timeline"`
 	Speech   string            `json:"speech"`
@@ -502,9 +502,9 @@ type actionEntry struct {
 	PDF       *PDFRef `json:"pdf,omitempty"`
 }
 
-// actionNameByEventType은 events.json의 내부 이벤트 타입을
-// 사용자 행동이 그대로 드러나는 액션 이름으로 바꾼다.
-// 여기에 없는 타입(예: 이전 버전 녹화에 남은 웹 페이지 조작 이벤트)은 타임라인에서 제외한다.
+// actionNameByEventType maps internal events.json event types
+// to action names that directly describe what the user did.
+// Types not listed here (e.g. web page interaction events left in older recordings) are excluded from the timeline.
 var actionNameByEventType = map[string]string{
 	"open":  "open",
 	"focus": "click",
@@ -514,26 +514,26 @@ var actionNameByEventType = map[string]string{
 
 func transcriptGuideText() transcriptGuide {
 	return transcriptGuide{
-		Timeline: "발화(kind=speech)와 사용자 상호작용(kind=action)을 시간순으로 병합한 목록. 모든 시간은 녹음 시작 기준 ms.",
-		Speech:   "오디오에서 전사된 발화 구간. text가 실제 발화 내용이다 (startMs~endMs).",
+		Timeline: "Speech (kind=speech) and user interactions (kind=action) merged in chronological order. All times are in ms from the start of the recording.",
+		Speech:   "A speech segment transcribed from the audio. text is what was actually said (startMs~endMs).",
 		Actions: map[string]string{
-			"open":   "사용자가 파일을 열람함",
-			"click":  "사용자가 본문 라인/블록을 클릭해 가리킴 (text=해당 위치의 원문)",
-			"select": "사용자가 더블클릭으로 단어/텍스트를 선택해 지칭함 (text=선택된 문자열)",
-			"copy":   "사용자가 텍스트를 클립보드로 복사함 (text=원본 라인 전체, selection=실제 복사된 문자열)",
+			"open":   "The user opened a file",
+			"click":  "The user clicked a line/block in the body to point at it (text=source text at that position)",
+			"select": "The user double-clicked to select a word/text and refer to it (text=selected string)",
+			"copy":   "The user copied text to the clipboard (text=entire source line, selection=the string actually copied)",
 		},
-		Fields: "untimedSpeech는 발화별 시간 정보를 제공하지 않는 모델의 전체 전사문이며, 조작 시각과 대응시키지 않는다. " +
-			"file/line/lineEnd는 원본 파일 기준 위치. approx=true면 라인 번호가 근사값. " +
-			"PDF 문서는 line 대신 pdf.page(1부터)와 pdf.x/pdf.y(페이지 좌상단 기준 0~1 정규화 클릭 좌표)를 사용하며, " +
-			"click의 text는 클릭 지점 주변 텍스트다.",
+		Fields: "untimedSpeech is the full transcript from a model that provides no per-segment timing; do not align it with action times. " +
+			"file/line/lineEnd are positions in the source file. approx=true means the line number is approximate. " +
+			"PDF documents use pdf.page (1-based) and pdf.x/pdf.y (click coordinates normalized to 0~1 from the page's top-left) instead of line, " +
+			"and a click's text is the text around the click point.",
 	}
 }
 
-// buildTranscriptJSON은 발화 세그먼트와 이벤트를 병합해 transcript.json 본문을 만든다.
+// buildTranscriptJSON merges speech segments and events into the transcript.json body.
 func buildTranscriptJSON(meta *RecordingMeta, result *WhisperResult, model string) ([]byte, error) {
 	type timed struct {
 		at    int64
-		rank  int // 같은 시각이면 발화를 먼저
+		rank  int // at equal times, speech comes first
 		entry any
 	}
 	var items []timed
@@ -589,7 +589,7 @@ func buildTranscriptJSON(meta *RecordingMeta, result *WhisperResult, model strin
 	}
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
-	enc.SetEscapeHTML(false) // 마크다운/코드 본문을 이스케이프 없이 그대로 보존
+	enc.SetEscapeHTML(false) // preserve Markdown/code bodies verbatim without escaping
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(doc); err != nil {
 		return nil, err

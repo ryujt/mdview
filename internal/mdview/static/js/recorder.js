@@ -1,20 +1,20 @@
-// recorder.js — 오디오 녹화 + 문서 참조 이벤트 타임라인 기록 Worker
+// recorder.js — Worker for audio recording + document reference event timeline
 //
-// 툴바의 녹화 버튼으로 마이크 녹음을 시작/종료하고, 녹화 중 사용자의
-//   - 파일 열람(open)
-//   - 텍스트 복사(copy: Ctrl+C / 복사 버튼)
-//   - 라인/블록 클릭(focus)
-//   - 단어 지정(word: 더블클릭 — 선택된 텍스트, 없으면 클릭 위치 뒤의 첫 단어)
-// 을 오디오 시간축(t: 녹음 시작 기준 ms)에 맞춰 기록한다.
-// 종료 시 오디오와 이벤트 메타(JSON)를 서버(/api/recording)에 업로드해
-// 사용자 앱 데이터의 mdview/mdview-recordings/rec-<timestamp>/ 아래 저장한다.
+// Starts/stops microphone recording via the toolbar record button and, while recording, logs the user's
+//   - file views (open)
+//   - text copies (copy: Ctrl+C / copy button)
+//   - line/block clicks (focus)
+//   - word picks (word: double-click — the selected text, or else the first word after the click point)
+// against the audio timeline (t: ms since recording start).
+// On stop, uploads the audio and event metadata (JSON) to the server (/api/recording),
+// which saves them under mdview/mdview-recordings/rec-<timestamp>/ in the user's app data.
 //
-// 라인 번호 정책:
-//   - 코드뷰어: 파일의 실제 라인 번호 (클릭 좌표/선택 영역에서 계산)
-//   - 마크다운: 블록 단위 라인 범위. SmartMD 전처리로 라인이 어긋난 경우
-//     원본 텍스트에서 동일 슬라이스를 탐색해 보정하고, 실패하면 approx로 표시한다.
-//   - PDF: 라인 대신 pdf 필드에 페이지 번호와 페이지 좌상단 기준
-//     0~1 정규화 클릭 좌표(x, y)를 기록한다 (선택/복사는 페이지 번호만).
+// Line number policy:
+//   - Code viewer: the file's actual line numbers (computed from click coordinates/selection)
+//   - Markdown: per-block line ranges. If SmartMD preprocessing shifted lines, the same slice is
+//     searched for in the original text to correct them; on failure the range is marked approx.
+//   - PDF: instead of lines, the pdf field records the page number and click coordinates (x, y)
+//     normalized to 0–1 from the page's top-left corner (selection/copy records only the page number).
 
 const API_RECORDING_PATH = '/api/recording';
 const API_RECORDING_STATUS_PATH = '/api/recording/status';
@@ -32,7 +32,7 @@ const OBJECT_URL_REVOKE_DELAY_MS = 10000;
 const PDF_COORD_DECIMALS = 10000;
 const PDF_TEXT_SNAP_RADIUS_PX = 160;
 
-// 브라우저별 지원 우선순위 (Chrome/Edge: webm+opus, Safari: mp4)
+// Per-browser support priority (Chrome/Edge: webm+opus, Safari: mp4)
 const MIME_CANDIDATES = [
   'audio/webm;codecs=opus',
   'audio/webm',
@@ -42,7 +42,7 @@ const MIME_CANDIDATES = [
 
 const DOWNLOAD_EXT_BY_MIME = { 'audio/webm': 'webm', 'audio/mp4': 'm4a', 'audio/ogg': 'ogg' };
 
-let ctx = null; // app.js가 주입: { preview, getState() → {mode, root, file, raw, transformed, blocks} }
+let ctx = null; // injected by app.js: { preview, getState() → {mode, root, file, raw, transformed, blocks} }
 let ui = null;
 
 let recording = false;
@@ -53,16 +53,16 @@ let events = [];
 let t0 = 0;
 let startedAt = '';
 let timerId = null;
-let lastFailed = null; // 업로드 실패 시 {blob, metaJson} 보관 (다운로드 폴백용)
+let lastFailed = null; // holds {blob, metaJson} on upload failure (for the download fallback)
 
 let toastEl = null;
 let toastTimer = null;
-let jobTimer = null;         // 전사 상태 폴링 타이머
-let activeDeviceLabel = '';  // 현재 녹음에 사용된 입력 장치 이름
-let uploading = false;     // 이전 녹화를 업로드하는 중인지 (업로드가 끝날 때까지 새 녹음 시작을 막는다)
+let jobTimer = null;         // transcription status polling timer
+let activeDeviceLabel = '';  // name of the input device used for the current recording
+let uploading = false;     // whether a previous recording is uploading (blocks new recordings until the upload finishes)
 
 /**
- * 녹화 기능을 초기화한다.
+ * Initializes the recording feature.
  * @param {{preview: HTMLElement, getState: () => object}} context
  */
 export function initRecorder(context) {
@@ -83,13 +83,13 @@ export function initRecorder(context) {
   ctx.preview.addEventListener('dblclick', handleDblClick);
   window.addEventListener('beforeunload', handleBeforeUnload);
 
-  // 오디오 입력 장치 선택
+  // Audio input device selection
   if (ui.deviceSelect) {
     ui.deviceSelect.addEventListener('change', () => {
       try {
         localStorage.setItem(DEVICE_STORE_KEY, ui.deviceSelect.value);
       } catch {
-        /* localStorage 불가 환경 무시 */
+        /* ignore environments without localStorage */
       }
     });
     populateDevices();
@@ -100,7 +100,7 @@ export function initRecorder(context) {
 }
 
 // ---------------------------------------------------------------------------
-// 오디오 입력 장치 선택
+// Audio input device selection
 // ---------------------------------------------------------------------------
 
 function savedDeviceId() {
@@ -112,9 +112,9 @@ function savedDeviceId() {
 }
 
 /**
- * 입력 장치 목록으로 드롭다운을 갱신한다.
- * 마이크 권한 허용 전에는 브라우저가 label을 비워 주므로 "마이크 N"으로 표시되고,
- * 첫 녹음(권한 허용) 이후 다시 호출되어 실제 장치 이름으로 채워진다.
+ * Updates the dropdown with the list of input devices.
+ * Before microphone permission is granted the browser returns empty labels, so devices show as "Microphone N";
+ * this is called again after the first recording (permission granted) to fill in the real device names.
  */
 async function populateDevices() {
   if (!ui.deviceSelect || !navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
@@ -129,7 +129,7 @@ async function populateDevices() {
 
   const def = document.createElement('option');
   def.value = '';
-  def.textContent = '기본 마이크';
+  def.textContent = 'Default microphone';
   ui.deviceSelect.appendChild(def);
 
   let index = 0;
@@ -140,7 +140,7 @@ async function populateDevices() {
     index += 1;
     const opt = document.createElement('option');
     opt.value = d.deviceId;
-    opt.textContent = d.label || `마이크 ${index}`;
+    opt.textContent = d.label || `Microphone ${index}`;
     if (d.deviceId === saved) {
       opt.selected = true;
       savedFound = true;
@@ -150,7 +150,7 @@ async function populateDevices() {
   if (!savedFound) ui.deviceSelect.value = '';
 }
 
-/** 파일이 열릴 때 호출된다 (녹화 중이면 open 이벤트로 기록). */
+/** Called when a file is opened (logged as an open event while recording). */
 export function noteFileOpen(file) {
   if (!recording || !file) return;
   pushEvent({ type: 'open', file });
@@ -158,7 +158,7 @@ export function noteFileOpen(file) {
 
 function toggleRecording() {
   if (uploading) {
-    showToast('이전 녹화를 업로드하는 중입니다. 잠시 후 다시 시도하세요.', { error: true });
+    showToast('The previous recording is still uploading. Please try again shortly.', { error: true });
     return;
   }
   if (recording) stopRecording();
@@ -166,26 +166,26 @@ function toggleRecording() {
 }
 
 // ---------------------------------------------------------------------------
-// 마이크 권한 진단
+// Microphone permission diagnostics
 // ---------------------------------------------------------------------------
 
 const MIC_DENIED_GUIDE =
-  '이 사이트의 마이크 권한이 차단되어 있습니다.\n' +
-  '· 주소창의 사이트 권한 아이콘(자물쇠/설정)에서 마이크를 "허용"으로 변경 후 새로고침\n' +
-  '· macOS: 시스템 설정 → 개인정보 보호 및 보안 → 마이크에서 사용 중인 브라우저를 켠 뒤 브라우저 재시작';
+  'Microphone access is blocked for this site.\n' +
+  '· Set the microphone to "Allow" via the site permissions icon (lock/settings) in the address bar, then reload\n' +
+  '· macOS: enable your browser under System Settings → Privacy & Security → Microphone, then restart the browser';
 
-/** Permissions API로 마이크가 이미 차단 상태인지 확인한다 (미지원 브라우저는 false). */
+/** Uses the Permissions API to check whether the microphone is already blocked (false on unsupported browsers). */
 async function micPermissionDenied() {
   if (!navigator.permissions || !navigator.permissions.query) return false;
   try {
     const status = await navigator.permissions.query({ name: 'microphone' });
     return status.state === 'denied';
   } catch {
-    return false; // Safari 등 'microphone' 미지원 → getUserMedia에서 판별
+    return false; // Safari etc. don't support 'microphone' → determined by getUserMedia
   }
 }
 
-/** getUserMedia 실패 원인별 안내 메시지를 만든다. */
+/** Builds a help message for each getUserMedia failure cause. */
 function micErrorMessage(err) {
   switch (err.name) {
     case 'NotAllowedError':
@@ -193,25 +193,25 @@ function micErrorMessage(err) {
       return MIC_DENIED_GUIDE;
     case 'NotFoundError':
     case 'DevicesNotFoundError':
-      return '사용 가능한 마이크 장치를 찾을 수 없습니다. 입력 장치 연결을 확인하세요.';
+      return 'No usable microphone found. Check that an input device is connected.';
     case 'NotReadableError':
     case 'TrackStartError':
-      return '다른 앱이 마이크를 사용 중이라 접근할 수 없습니다. 해당 앱을 종료 후 다시 시도하세요.';
+      return 'The microphone is in use by another app and cannot be accessed. Quit that app and try again.';
     default:
-      return `마이크를 열 수 없습니다: ${err.name} — ${err.message}`;
+      return `Unable to open the microphone: ${err.name} — ${err.message}`;
   }
 }
 
 async function startRecording() {
   if (!navigator.mediaDevices || !window.MediaRecorder) {
     showToast(
-      '이 브라우저는 오디오 녹음을 지원하지 않습니다.\n' +
-        `(secure context 필요 — 주소가 localhost인지 확인하세요: ${location.origin})`,
+      'This browser does not support audio recording.\n' +
+        `(a secure context is required — make sure the address is localhost: ${location.origin})`,
       { error: true }
     );
     return;
   }
-  // 이미 "차단" 상태면 getUserMedia를 불러도 프롬프트 없이 실패하므로 먼저 안내한다.
+  // If already "blocked", getUserMedia fails without a prompt, so show guidance first.
   if (await micPermissionDenied()) {
     showToast(MIC_DENIED_GUIDE, { error: true });
     return;
@@ -223,11 +223,11 @@ async function startRecording() {
       deviceId ? { audio: { deviceId: { exact: deviceId } } } : { audio: true }
     );
   } catch (err) {
-    // 선택한 장치가 뽑혔거나 사라진 경우: 기본 마이크로 폴백
+    // The selected device was unplugged or disappeared: fall back to the default microphone
     if (deviceId && (err.name === 'OverconstrainedError' || err.name === 'NotFoundError')) {
       try {
         stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        showToast('선택한 마이크를 찾을 수 없어 기본 마이크로 녹음합니다.');
+        showToast('The selected microphone was not found; recording with the default microphone.');
         if (ui.deviceSelect) ui.deviceSelect.value = '';
       } catch (err2) {
         showToast(micErrorMessage(err2), { error: true });
@@ -238,7 +238,7 @@ async function startRecording() {
       return;
     }
   }
-  // 권한 허용 후에는 장치 label이 채워지므로 목록을 갱신한다.
+  // Device labels are filled in once permission is granted, so refresh the list.
   populateDevices();
   const track = stream.getAudioTracks()[0];
   activeDeviceLabel = track ? track.label : '';
@@ -247,7 +247,7 @@ async function startRecording() {
     mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
   } catch (err) {
     stream.getTracks().forEach((t) => t.stop());
-    showToast(`녹음을 시작할 수 없습니다: ${err.message}`, { error: true });
+    showToast(`Unable to start recording: ${err.message}`, { error: true });
     return;
   }
   mediaStream = stream;
@@ -262,7 +262,7 @@ async function startRecording() {
   });
   mediaRecorder.addEventListener('stop', finalizeRecording);
   mediaRecorder.addEventListener('error', (e) => {
-    showToast(`녹음 중 오류가 발생했습니다: ${e.error ? e.error.message : e.type}`, { error: true });
+    showToast(`An error occurred while recording: ${e.error ? e.error.message : e.type}`, { error: true });
   });
   mediaRecorder.start(AUDIO_TIMESLICE_MS);
 
@@ -274,7 +274,7 @@ async function startRecording() {
 }
 
 // ---------------------------------------------------------------------------
-// 입력 레벨 미터 — 마이크가 실제로 소리를 받고 있는지 시각 확인용
+// Input level meter — visual check that the microphone is actually picking up sound
 // ---------------------------------------------------------------------------
 
 let audioCtx = null;
@@ -301,7 +301,7 @@ function startLevelMeter(stream) {
     };
     tick();
   } catch {
-    /* 미터 실패는 녹음 자체에 영향 없음 */
+    /* a meter failure does not affect the recording itself */
   }
 }
 
@@ -319,7 +319,7 @@ function stopLevelMeter() {
 
 function stopRecording() {
   if (!mediaRecorder || mediaRecorder.state === 'inactive') return;
-  mediaRecorder.stop(); // → 'stop' 이벤트에서 finalizeRecording 실행
+  mediaRecorder.stop(); // → finalizeRecording runs on the 'stop' event
 }
 
 function finalizeRecording() {
@@ -339,13 +339,13 @@ function finalizeRecording() {
   chunks = [];
   if (blob.size === 0) {
     showToast(
-      '녹음된 오디오 데이터가 없습니다. 녹음 중 상단의 입력 레벨이 움직이는지 확인하세요.\n' +
-        '(macOS: 시스템 설정 → 개인정보 보호 및 보안 → 마이크에서 브라우저 허용 여부 확인)',
+      'No audio data was recorded. While recording, check that the input level at the top is moving.\n' +
+        '(macOS: check that the browser is allowed under System Settings → Privacy & Security → Microphone)',
       { error: true }
     );
     return;
   }
-  // 메타는 대기 전에 확정한다. 대기 중 새 녹음이 시작되면 events·startedAt·장치가 초기화되기 때문이다.
+  // Finalize the metadata before waiting, because a new recording started meanwhile would reset events, startedAt and the device.
   const meta = buildMeta(durationMs);
   uploadRecording(blob, meta);
 }
@@ -373,7 +373,7 @@ async function uploadRecording(blob, meta) {
   form.append('meta', metaJson);
   uploading = true;
   ui.button.disabled = true;
-  setJobStatus('업로드 중', { spin: true });
+  setJobStatus('Uploading', { spin: true });
   try {
     const res = await fetch(API_RECORDING_PATH, { method: 'POST', body: form });
     if (!res.ok) {
@@ -382,16 +382,16 @@ async function uploadRecording(blob, meta) {
     }
     const result = await res.json();
     lastFailed = null;
-    setJobStatus('후처리 중', { spin: true });
+    setJobStatus('Post-processing', { spin: true });
     pollTranscribeStatus(result.id);
     showToast(
-      `녹화 저장 완료 (이벤트 ${meta.events.length}개)\n${result.dir}\n` +
-        '후처리(전사·prompt.txt 생성)가 백그라운드에서 진행 중입니다 (완료 시 알림)'
+      `Recording saved (${meta.events.length} events)\n${result.dir}\n` +
+        'Post-processing (transcription, prompt.txt generation) is running in the background (you will be notified when done)'
     );
   } catch (err) {
     setJobStatus('');
     lastFailed = { blob, metaJson };
-    showToast(`녹화 업로드에 실패했습니다: ${err.message}`, { error: true, download: true });
+    showToast(`Failed to upload the recording: ${err.message}`, { error: true, download: true });
   } finally {
     uploading = false;
     ui.button.disabled = false;
@@ -399,10 +399,10 @@ async function uploadRecording(blob, meta) {
 }
 
 // ---------------------------------------------------------------------------
-// 전사 진행 상태 (툴바 칩 + 서버 폴링)
+// Transcription progress (toolbar chip + server polling)
 // ---------------------------------------------------------------------------
 
-/** 툴바의 작업 상태 칩을 갱신한다. 빈 텍스트면 숨긴다. */
+/** Updates the toolbar job status chip. Hidden when the text is empty. */
 function setJobStatus(text, { spin = false, done = false } = {}) {
   if (!ui.jobStatus) return;
   if (jobTimer) {
@@ -433,7 +433,7 @@ function setJobStatus(text, { spin = false, done = false } = {}) {
   ui.jobStatus.appendChild(label);
 }
 
-/** 자동 전사 상태를 주기적으로 조회해 완료/실패를 알린다. */
+/** Periodically polls automatic transcription status and reports completion/failure. */
 function pollTranscribeStatus(id) {
   const startedAtMs = Date.now();
   const tick = async () => {
@@ -442,17 +442,17 @@ function pollTranscribeStatus(id) {
       const res = await fetch(`${API_RECORDING_STATUS_PATH}?id=${encodeURIComponent(id)}`);
       if (res.ok) job = await res.json();
     } catch {
-      /* 일시적 네트워크 오류 — 다음 폴링에서 재시도 */
+      /* transient network error — retry on the next poll */
     }
     if (job && job.state === 'done') {
-      setJobStatus('후처리 완료', { done: true });
+      setJobStatus('Post-processing done', { done: true });
       setTimeout(() => setJobStatus(''), JOB_DONE_HIDE_MS);
       notifyTranscriptReady(job);
       return;
     }
     if (job && job.state === 'error') {
       setJobStatus('');
-      showToast(`후처리 실패: ${(job.error || '').slice(0, ERROR_TEXT_LIMIT)}`, { error: true });
+      showToast(`Post-processing failed: ${(job.error || '').slice(0, ERROR_TEXT_LIMIT)}`, { error: true });
       return;
     }
     if (Date.now() - startedAtMs > STATUS_POLL_MAX_MS) {
@@ -464,29 +464,29 @@ function pollTranscribeStatus(id) {
   tick();
 }
 
-/** 후처리 완료 토스트. 시스템 클립보드 복사 결과와 저장 파일을 안내한다. */
+/** Post-processing complete toast. Reports the system clipboard copy result and saved files. */
 function notifyTranscriptReady(job) {
   const state = ctx.getState();
   const canOpen = state.mode === 'folder' && ctx.openFile;
   const lines = [];
-  if (job.clipboardCopied) lines.push('transcript.json 내용을 클립보드에 복사했습니다. 붙여 넣어 사용하세요.');
+  if (job.clipboardCopied) lines.push('Copied transcript.json to the clipboard. Paste it to use it.');
   if (job.clipboardError) lines.push(job.clipboardError);
   if (job.notificationError) lines.push(job.notificationError);
-  if (job.promptRel || job.prompt) lines.push(`prompt.txt 생성: ${job.promptRel || job.prompt}`);
-  if (job.transcript) lines.push(`전사 문서: ${job.transcriptRel || job.transcript}`);
+  if (job.promptRel || job.prompt) lines.push(`prompt.txt created: ${job.promptRel || job.prompt}`);
+  if (job.transcript) lines.push(`Transcript: ${job.transcriptRel || job.transcript}`);
   if (job.note) lines.push(job.note);
-  const text = lines.length ? lines.join('\n') : '후처리 완료';
+  const text = lines.length ? lines.join('\n') : 'Post-processing done';
   if (job.clipboardError && job.transcript) {
     showToast(text, {
-      action: { label: 'transcript.json 복사', run: () => copyTranscript(job.id) },
+      action: { label: 'Copy transcript.json', run: () => copyTranscript(job.id) },
     });
   } else if (canOpen && job.promptRel) {
     showToast(text, {
-      action: { label: 'prompt.txt 열기', run: () => ctx.openFile(job.promptRel) },
+      action: { label: 'Open prompt.txt', run: () => ctx.openFile(job.promptRel) },
     });
   } else if (job.prompt) {
     showToast(text, {
-      action: { label: 'prompt.txt 열기', run: () => window.open(recordingFileURL(job.id, 'prompt.txt'), '_blank', 'noopener') },
+      action: { label: 'Open prompt.txt', run: () => window.open(recordingFileURL(job.id, 'prompt.txt'), '_blank', 'noopener') },
     });
   } else {
     showToast(text);
@@ -500,16 +500,16 @@ function recordingFileURL(id, name) {
 async function copyTranscript(id) {
   try {
     const res = await fetch(recordingFileURL(id, 'transcript.json'));
-    if (!res.ok) throw new Error('전사 문서를 읽을 수 없습니다.');
+    if (!res.ok) throw new Error('Unable to read the transcript.');
     await navigator.clipboard.writeText(await res.text());
-    showToast('transcript.json 내용을 클립보드에 복사했습니다.');
+    showToast('Copied transcript.json to the clipboard.');
   } catch {
-    showToast('클립보드에 복사하지 못했습니다. 저장된 transcript.json 파일을 확인해주세요.', { error: true });
+    showToast('Could not copy to the clipboard. Please check the saved transcript.json file.', { error: true });
   }
 }
 
 // ---------------------------------------------------------------------------
-// 이벤트 수집
+// Event collection
 // ---------------------------------------------------------------------------
 
 function elapsedMs() {
@@ -521,7 +521,7 @@ function pushEvent(event) {
   updateEventCount();
 }
 
-/** Ctrl+C(⌘C) 복사: 선택 영역을 소스 기준 텍스트/라인으로 기록한다. */
+/** Ctrl+C (⌘C) copy: logs the selection as source-based text/lines. */
 function handleCopy() {
   if (!recording) return;
   const sel = window.getSelection();
@@ -531,7 +531,7 @@ function handleCopy() {
 
   const ranges = [];
   for (let i = 0; i < sel.rangeCount; i++) ranges.push(sel.getRangeAt(i));
-  if (!ranges.some((r) => rangeIntersectsNode(r, ctx.preview))) return; // 뷰 밖 복사는 무시
+  if (!ranges.some((r) => rangeIntersectsNode(r, ctx.preview))) return; // ignore copies outside the view
 
   const selectionText = sel.toString();
   const pdfPage = pdfPageOfRanges(ranges);
@@ -547,7 +547,7 @@ function handleCopy() {
   }
 }
 
-/** 선택 영역이 PDF 텍스트 레이어와 겹치면 시작 지점이 속한 .pdf-page를 반환한다. */
+/** If the selection overlaps a PDF text layer, returns the .pdf-page containing its start point. */
 function pdfPageOfRanges(ranges) {
   for (const r of ranges) {
     const el = nodeElement(r.startContainer);
@@ -557,7 +557,7 @@ function pdfPageOfRanges(ranges) {
   return null;
 }
 
-/** .pdf-page 요소에서 이벤트에 기록할 pdf 참조를 만든다. */
+/** Builds the pdf reference to log in an event from a .pdf-page element. */
 function pdfRefOf(pageEl, point) {
   const ref = { page: Number(pageEl.dataset.pageNumber) || 1 };
   if (point) {
@@ -567,7 +567,7 @@ function pdfRefOf(pageEl, point) {
   return ref;
 }
 
-/** 다이어그램/코드 블록의 복사 버튼 클릭을 copy 이벤트로 기록한다. */
+/** Logs copy-button clicks on diagrams/code blocks as copy events. */
 function handleManualCopy(e) {
   if (!recording) return;
   const state = ctx.getState();
@@ -591,7 +591,7 @@ function copyFromCode(viewer, ranges, selectionText, state) {
     if (!rangeIntersectsNode(r, content)) continue;
     const s = lineAtPoint(content, r.startContainer, r.startOffset, lineCount);
     let e = lineAtPoint(content, r.endContainer, r.endOffset, lineCount);
-    // 선택이 줄 끝 개행까지 포함하면(트리플클릭 등) 다음 줄로 넘어가지 않게 보정
+    // If the selection includes the trailing newline (triple-click, etc.), adjust so it does not spill onto the next line
     if (e > s && r.toString().endsWith('\n')) e -= 1;
     startLine = startLine === null ? s : Math.min(startLine, s);
     endLine = endLine === null ? e : Math.max(endLine, e);
@@ -650,12 +650,12 @@ function recordBlockCopy(blockEl, copiedText, state) {
   });
 }
 
-/** 클릭한 라인/블록을 포커스로 표시하고 기록한다. */
+/** Highlights the clicked line/block as focused and logs it. */
 function handleClick(e) {
   if (!recording) return;
-  if (e.target.closest('.copy-button, .preview-media-copy')) return; // 복사 버튼은 copy 이벤트로만 기록
+  if (e.target.closest('.copy-button, .preview-media-copy')) return; // copy buttons are logged only as copy events
   const sel = window.getSelection();
-  if (sel && !sel.isCollapsed) return; // 드래그 선택을 마친 클릭은 포커스로 취급하지 않음
+  if (sel && !sel.isCollapsed) return; // a click that ends a drag selection is not treated as focus
   const state = ctx.getState();
   if (!state.file) return;
 
@@ -674,8 +674,8 @@ function handleClick(e) {
 }
 
 /**
- * PDF 페이지 클릭: 페이지 번호와 정규화 좌표(0~1)를 기록하고 클릭 지점을 표시한다.
- * 클릭 지점 주변의 텍스트를 함께 담아 전사 문서에서 위치를 해석할 수 있게 한다.
+ * PDF page click: logs the page number and normalized coordinates (0–1) and marks the click point.
+ * Includes the text around the click point so the location can be interpreted in the transcript.
  */
 function focusPdfPoint(pageEl, e, state) {
   const rect = pageEl.getBoundingClientRect();
@@ -692,7 +692,7 @@ function focusPdfPoint(pageEl, e, state) {
   });
 }
 
-/** 클릭 지점에서 가장 가까운 텍스트 레이어 스팬의 텍스트를 찾는다 (반경 제한, 없으면 null). */
+/** Finds the text of the text-layer span nearest the click point (within a radius; null if none). */
 function nearestPdfText(pageEl, clientX, clientY) {
   let best = null;
   let bestDist = PDF_TEXT_SNAP_RADIUS_PX * PDF_TEXT_SNAP_RADIUS_PX;
@@ -754,13 +754,13 @@ function focusMarkdownBlock(blockEl, state) {
 }
 
 // ---------------------------------------------------------------------------
-// 더블클릭 단어 지정 (word 이벤트)
+// Double-click word pick (word event)
 // ---------------------------------------------------------------------------
 
 /**
- * 더블클릭: 선택된 텍스트를 word 이벤트로 기록한다. 브라우저가 아무것도
- * 선택하지 않았다면(여백 등) 클릭 위치 뒤의 첫 단어를 찾아 기록하고,
- * 기록된 단어가 무엇인지 보이도록 그 단어를 선택 상태로 만든다.
+ * Double-click: logs the selected text as a word event. If the browser selected
+ * nothing (e.g. blank space), finds and logs the first word after the click point,
+ * and selects that word so it is visible what was logged.
  */
 function handleDblClick(e) {
   if (!recording) return;
@@ -772,7 +772,7 @@ function handleDblClick(e) {
   if (sel && !sel.isCollapsed && sel.rangeCount > 0) {
     const range = sel.getRangeAt(0);
     const el = nodeElement(range.startContainer);
-    if (el && el.closest('.code-gutter')) return; // 거터 더블클릭(라인 번호 선택)은 무시
+    if (el && el.closest('.code-gutter')) return; // ignore double-clicks on the gutter (line number selection)
     if (rangeIntersectsNode(range, ctx.preview)) {
       const text = sel.toString().trim();
       if (text) {
@@ -804,8 +804,8 @@ function nodeElement(node) {
 }
 
 /**
- * 텍스트 위치(node, offset)가 속한 코드 라인 또는 마크다운 블록의 라인 범위를 구한다.
- * PDF 텍스트 레이어 안이면 라인 대신 페이지 요소를 반환한다.
+ * Gets the code line or Markdown block line range containing a text position (node, offset).
+ * Inside a PDF text layer, returns the page element instead of lines.
  */
 function anchorLineRange(node, offset, state) {
   const el = nodeElement(node);
@@ -828,7 +828,7 @@ function anchorLineRange(node, offset, state) {
   return { line: mapped.line, lineEnd: mapped.lineEnd, approx: mapped.approx };
 }
 
-/** 브라우저별 caret API로 화면 좌표에 해당하는 텍스트 위치를 얻는다. */
+/** Gets the text position at screen coordinates using the browser-specific caret API. */
 function caretFromPoint(x, y) {
   if (document.caretPositionFromPoint) {
     const pos = document.caretPositionFromPoint(x, y);
@@ -841,7 +841,7 @@ function caretFromPoint(x, y) {
   return null;
 }
 
-/** 클릭 지점 뒤(문서 순서상)의 첫 단어를 찾는다. 없으면 null. */
+/** Finds the first word after the click point (in document order). null if none. */
 function nextWordFromPoint(x, y) {
   const caret = caretFromPoint(x, y);
   if (!caret || !ctx.preview.contains(caret.node)) return null;
@@ -851,7 +851,7 @@ function nextWordFromPoint(x, y) {
   const viewer = el.closest('.code-viewer');
   if (viewer) {
     scope = viewer.querySelector('.code-content');
-    if (!scope || !scope.contains(caret.node)) return null; // 거터 등 본문 밖은 무시
+    if (!scope || !scope.contains(caret.node)) return null; // ignore areas outside the body, such as the gutter
   }
   const boundary = document.createRange();
   try {
@@ -874,7 +874,7 @@ function nextWordFromPoint(x, y) {
     if (node === caret.node) {
       from = caret.offset;
     } else if (boundary.comparePoint(node, node.nodeValue.length) <= 0) {
-      continue; // 캐럿보다 앞의 텍스트
+      continue; // text before the caret
     }
     const m = /\S+/.exec(node.nodeValue.slice(from));
     if (m) {
@@ -885,7 +885,7 @@ function nextWordFromPoint(x, y) {
   return null;
 }
 
-/** 기록된 단어를 실제 선택 상태로 만들어 무엇이 기록됐는지 보여 준다. */
+/** Actually selects the logged word to show what was logged. */
 function selectFoundWord(found) {
   try {
     const r = document.createRange();
@@ -895,12 +895,12 @@ function selectFoundWord(found) {
     sel.removeAllRanges();
     sel.addRange(r);
   } catch {
-    /* 선택 표시 실패는 기록에 영향 없음 */
+    /* a failure to show the selection does not affect logging */
   }
 }
 
 // ---------------------------------------------------------------------------
-// 라인 매핑 유틸
+// Line mapping utilities
 // ---------------------------------------------------------------------------
 
 function normalizeNewlines(text) {
@@ -912,9 +912,9 @@ function normalizedLines(text) {
 }
 
 /**
- * 블록 파서 기준 라인 범위(SmartMD 전처리 텍스트)를 원본 파일 라인으로 보정한다.
- * 전처리가 항등이면 그대로, 아니면 원본에서 동일 슬라이스를 탐색해 가장 가까운
- * 위치를 채택한다. 찾지 못하면 전처리 기준 값을 approx로 반환한다.
+ * Maps a block-parser line range (in SmartMD-preprocessed text) to original file lines.
+ * If preprocessing was an identity, returns it as is; otherwise searches the original for the same slice
+ * and takes the closest match. If none is found, returns the preprocessed values marked approx.
  */
 function mapLinesToRaw(state, startLine, endLine) {
   const raw = normalizeNewlines(state.raw);
@@ -930,7 +930,7 @@ function mapLinesToRaw(state, startLine, endLine) {
   return { line: startLine, lineEnd: endLine, text: slice, approx: true };
 }
 
-/** raw 안에서 slice가 나타나는 라인 중 hintLine에 가장 가까운 것을 반환한다. */
+/** Returns the line in raw where slice appears that is closest to hintLine. */
 function findClosestLine(raw, slice, hintLine) {
   if (!slice) return null;
   let best = null;
@@ -943,10 +943,10 @@ function findClosestLine(raw, slice, hintLine) {
   return best;
 }
 
-/** content 시작부터 (container, offset)까지의 텍스트로 라인 번호를 계산한다. */
+/** Computes a line number from the text between the start of content and (container, offset). */
 function lineAtPoint(content, container, offset, lineCount) {
   if (!content.contains(container)) {
-    // 선택 끝점이 코드 영역 밖(거터 등)이면 문서 순서로 앞/뒤를 판별해 클램프한다.
+    // If the selection endpoint is outside the code area (e.g. gutter), clamp it by checking before/after in document order.
     const pos = content.compareDocumentPosition(container);
     if (pos & Node.DOCUMENT_POSITION_PRECEDING) return 1;
     return lineCount;
@@ -971,7 +971,7 @@ function rangeIntersectsNode(range, node) {
 }
 
 // ---------------------------------------------------------------------------
-// 포커스 표시 (하이라이트)
+// Focus indicator (highlight)
 // ---------------------------------------------------------------------------
 
 function markCodeLine(viewer, content, line, lineHeight, paddingTop) {
@@ -1000,17 +1000,17 @@ function clearFocusMarks() {
 }
 
 // ---------------------------------------------------------------------------
-// UI (버튼/타이머/토스트)
+// UI (button/timer/toast)
 // ---------------------------------------------------------------------------
 
 function setRecordingUI(on) {
-  const title = on ? '녹화 중지 및 저장' : '오디오 녹화 시작';
+  const title = on ? 'Stop and save recording' : 'Start audio recording';
   ui.button.classList.toggle('recording', on);
   ui.button.title = title;
   ui.button.setAttribute('aria-label', title);
   ui.button.setAttribute('aria-pressed', String(on));
   ui.status.hidden = !on;
-  if (ui.deviceSelect) ui.deviceSelect.disabled = on; // 녹화 중 장치 변경 방지
+  if (ui.deviceSelect) ui.deviceSelect.disabled = on; // prevent device changes while recording
   if (on) {
     updateTimer();
     updateEventCount();
@@ -1027,7 +1027,7 @@ function updateTimer() {
 
 function updateEventCount() {
   if (!recording) return;
-  ui.eventsCount.textContent = `이벤트 ${events.length}`;
+  ui.eventsCount.textContent = `Events ${events.length}`;
 }
 
 function formatClock(ms) {
@@ -1042,7 +1042,7 @@ function formatClock(ms) {
 function handleBeforeUnload(e) {
   if (!recording) return;
   e.preventDefault();
-  e.returnValue = ''; // 브라우저 기본 확인 대화상자 표시
+  e.returnValue = ''; // show the browser's default confirmation dialog
 }
 
 export function showToast(message, { error = false, download = false, action = null } = {}) {
@@ -1061,7 +1061,7 @@ export function showToast(message, { error = false, download = false, action = n
   if (download) {
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.textContent = '파일로 다운로드';
+    btn.textContent = 'Download as file';
     btn.addEventListener('click', () => {
       downloadFallback();
       hideToast();
@@ -1084,7 +1084,7 @@ export function showToast(message, { error = false, download = false, action = n
   close.type = 'button';
   close.className = 'toast-close';
   close.textContent = '✕';
-  close.setAttribute('aria-label', '닫기');
+  close.setAttribute('aria-label', 'Close');
   close.addEventListener('click', hideToast);
   toastEl.appendChild(close);
 
@@ -1104,7 +1104,7 @@ function hideToast() {
   }
 }
 
-/** 업로드 실패 시 오디오와 이벤트 JSON을 브라우저 다운로드로 보존한다. */
+/** On upload failure, preserves the audio and event JSON via browser download. */
 function downloadFallback() {
   if (!lastFailed) return;
   const stamp = startedAt.replace(/[:.]/g, '-');

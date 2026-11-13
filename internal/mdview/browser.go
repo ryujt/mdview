@@ -17,8 +17,8 @@ const (
 	cmdWindows = "cmd"
 )
 
-// OpenBrowser는 OS에 맞는 기본 브라우저로 URL을 연다.
-// Orchestrator가 호출하는 Gateway이다.
+// OpenBrowser opens the URL in the OS default browser.
+// It is a Gateway called by the Orchestrator.
 func OpenBrowser(url string) {
 	var cmd *exec.Cmd
 

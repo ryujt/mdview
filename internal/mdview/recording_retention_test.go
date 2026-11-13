@@ -26,7 +26,7 @@ func TestPruneExpiredRecordings(t *testing.T) {
 	older := retentionRecording(t, base, cutoff.Add(-time.Hour))
 	fresh := retentionRecording(t, base, cutoff.Add(time.Second))
 	active := retentionRecording(t, base, cutoff.Add(-2*time.Hour))
-	// 새 파일을 읽거나 기록해도 최초 저장 후 7일이라는 보존 기간은 늘어나지 않는다.
+	// Reading or writing new files does not extend the 7-day retention from the initial save.
 	writeFixture(t, older, promptFileName, "recently regenerated prompt")
 	if err := os.Chtimes(exact, now, now); err != nil {
 		t.Fatal(err)
@@ -46,16 +46,16 @@ func TestPruneExpiredRecordings(t *testing.T) {
 	}
 	for _, dir := range []string{exact, older} {
 		if _, err := os.Stat(dir); !os.IsNotExist(err) {
-			t.Errorf("만료된 녹화가 남아 있음: %s (%v)", dir, err)
+			t.Errorf("expired recording still present: %s (%v)", dir, err)
 		}
 	}
 	for _, dir := range []string{fresh, active, foreign, invalid} {
 		if _, err := os.Stat(dir); err != nil {
-			t.Errorf("보존할 디렉토리가 사라짐: %s (%v)", dir, err)
+			t.Errorf("directory that should be kept was removed: %s (%v)", dir, err)
 		}
 	}
 	if removed, err := pruneExpiredRecordings(base, now, nil); err != nil || removed != 1 {
-		t.Fatalf("후처리가 끝난 녹화가 정리되지 않음: %d, %v", removed, err)
+		t.Fatalf("post-processed recording was not pruned: %d, %v", removed, err)
 	}
 }
 
@@ -68,7 +68,7 @@ func TestPruneExpiredRecordingsDoesNotFollowSymlinks(t *testing.T) {
 	if err := os.Symlink(external, filepath.Join(base, recordingsDirName, filepath.Base(external))); err != nil {
 		t.Fatal(err)
 	}
-	// 녹화 안의 심볼릭 링크도 대상 디렉토리의 삭제로 이어지지 않는다.
+	// A symlink inside a recording must not cause its target directory to be deleted.
 	if err := os.Symlink(external, filepath.Join(local, "linked")); err != nil {
 		t.Fatal(err)
 	}
@@ -76,14 +76,14 @@ func TestPruneExpiredRecordingsDoesNotFollowSymlinks(t *testing.T) {
 		t.Fatalf("removed=%d err=%v", removed, err)
 	}
 	if _, err := os.Stat(external); err != nil {
-		t.Fatalf("외부 녹화가 삭제됨: %v", err)
+		t.Fatalf("external recording was deleted: %v", err)
 	}
 	linkedBase := t.TempDir()
 	if err := os.Symlink(filepath.Join(externalBase, recordingsDirName), filepath.Join(linkedBase, recordingsDirName)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := pruneExpiredRecordings(linkedBase, now, nil); err == nil {
-		t.Fatal("심볼릭 링크 저장소를 정리 대상으로 허용함")
+		t.Fatal("symlinked store was allowed as a pruning target")
 	}
 	if _, err := os.Stat(external); err != nil {
 		t.Fatal(err)
@@ -110,7 +110,7 @@ func TestRecordingRetentionTimer(t *testing.T) {
 		}
 		select {
 		case <-deadline:
-			t.Fatal("실행 중 만료된 녹화가 정리되지 않음")
+			t.Fatal("recording that expired while running was not pruned")
 		case <-time.After(time.Millisecond):
 		}
 	}
@@ -118,6 +118,6 @@ func TestRecordingRetentionTimer(t *testing.T) {
 	select {
 	case <-done:
 	case <-time.After(time.Second):
-		t.Fatal("정리 타이머가 종료되지 않음")
+		t.Fatal("cleanup timer did not stop")
 	}
 }

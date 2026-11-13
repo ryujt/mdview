@@ -13,7 +13,7 @@ function createCopyButton(text) {
     navigator.clipboard.writeText(text).then(() => {
       button.textContent = 'Copied!';
       setTimeout(() => { button.textContent = 'Copy'; }, COPY_RESET_DELAY_MS);
-      // 녹화 Worker가 복사 버튼 사용도 copy 이벤트로 기록할 수 있게 알린다.
+      // Notify the recording Worker so copy-button use can also be logged as a copy event.
       document.dispatchEvent(
         new CustomEvent('mdview:manualcopy', { detail: { text, el: button } })
       );
@@ -106,7 +106,7 @@ export function processCodeBlock(codeElement, lang) {
   pre.parentNode.replaceChild(container, pre);
   container.appendChild(pre);
   container.appendChild(copyButton);
-  // 언어가 명시되고 등록된 경우에만 하이라이트. 미표기 코드는 자동 탐지 없이 일반 텍스트 처리.
+  // Highlight only when a registered language is specified. Unlabeled code is plain text, with no auto-detection.
   if (hljs && lang && hljs.getLanguage && hljs.getLanguage(lang)) {
     try { hljs.highlightElement(codeElement); } catch (e) { /* ignore */ }
   }

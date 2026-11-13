@@ -9,9 +9,9 @@ import { preprocessSmartMd, applySmartTableSpecs } from './smartmd.js';
 
 let textFenceTokenizerApplied = false;
 
-// ```text 펜스가 내부의 ```xxx 펜스(다이어그램 등 코드 예시)를 삼켜 하나의
-// 일반 텍스트 코드 블록으로 렌더링되도록 marked 토크나이저를 확장한다.
-// 정보 문자열이 있는 펜스는 중첩 열림, 맨몸 ```는 닫힘으로 세어 영역을 구분한다.
+// Extends the marked tokenizer so a ```text fence swallows inner ```xxx fences (code examples
+// such as diagrams) and renders as a single plain-text code block.
+// Fences with an info string count as nested openers and bare ``` as closers to delimit the region.
 function ensureTextFenceTokenizer() {
   if (textFenceTokenizerApplied) return;
   textFenceTokenizerApplied = true;
@@ -21,7 +21,7 @@ function ensureTextFenceTokenizer() {
         if (!/^(`{3,}|~{3,})[ \t]*text[ \t]*(\n|$)/i.test(src)) return false;
         const lines = src.split('\n');
         const close = findTextFenceClose(lines, 0);
-        if (close === -1) return false; // 미종결 → 기본 동작에 맡김
+        if (close === -1) return false; // Unclosed → fall back to the default behavior
         return {
           type: 'code',
           raw: lines.slice(0, close + 1).join('\n'),
@@ -33,7 +33,7 @@ function ensureTextFenceTokenizer() {
   });
 }
 
-// 다이어그램 원본 코드(펜스 안 텍스트)를 보관해 다이어그램 복사 버튼이 사용한다.
+// Keeps the diagram source (text inside the fence) for the diagram copy button.
 function sourceAttr(code, lang) {
   const escape = (value) => String(value)
     .replace(/&/g, '&amp;')
@@ -94,7 +94,7 @@ export function renderSingleBlock(block, index) {
   wrapper.setAttribute('data-block-type', block.type);
   if (block.type === 'empty') return wrapper;
   const renderer = initMarkdownRenderer();
-  // 코드 펜스를 제외한 블록에만 CJK 인접 강조 보정을 적용한다.
+  // Apply the CJK-adjacent emphasis fix-up only to blocks other than code fences.
   const content = block.type === 'code_fence' ? block.content : fixCjkEmphasis(block.content);
   wrapper.innerHTML = window.marked.parse(content, { renderer });
   return wrapper;
@@ -148,7 +148,7 @@ export function renderMarkdown(markdownContent, preview, currentBlocksRef) {
   const transformed = preprocessSmartMd(markdownContent);
   const newBlocks = parseMarkdownToBlocks(transformed);
   currentBlocksRef.current = newBlocks;
-  // 블록 라인 번호의 기준 텍스트 (녹화 이벤트의 원본 라인 매핑에 사용)
+  // Reference text for block line numbers (used to map recording events to source lines)
   currentBlocksRef.transformed = transformed;
   patchPreviewDOM(preview, newBlocks);
 }

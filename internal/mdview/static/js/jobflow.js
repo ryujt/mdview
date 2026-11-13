@@ -6,7 +6,7 @@ const JobFlowToSVG = {
     const objectSet = new Set();
     const relationships = [];
     const standaloneShapes = [];
-    // orchestrator:(또는 기존 master:) 헤더가 가리키는 객체. 헤더에 선언된 객체는 열 위치와 무관하게 다른 색으로 구별해 그린다
+    // Object named by the orchestrator: (or legacy master:) header. Declared objects are drawn in a distinct color regardless of column position
     let orchestrator = '';
     let lineIndex = 0;
     const headerValue = (line) => line.slice(line.indexOf(':') + 1).trim();
@@ -22,9 +22,9 @@ const JobFlowToSVG = {
       if (header && header[1].toLowerCase() !== 'scope') {
         orchestrator = headerValue(line);
       } else if (header) {
-        // scope 헤더는 경계 이름이라 객체가 아니다. 값에 점이 있어도 도형으로 읽지 않는다
+        // A scope header is a boundary name, not an object. Do not read it as a shape even if the value contains a dot
       } else if (/^\s*object\s*:/i.test(line)) {
-        // 들여쓴 Object: 줄(목록 안 코드 블록 복사 등)도 선언으로 읽는다
+        // Indented Object: lines (e.g. code blocks copied inside lists) are also read as declarations
         const objectNames = headerValue(line).split(',').map(obj => obj.trim()).filter(Boolean);
         objectNames.forEach(addObject);
       } else if (line.includes('-->')) {
@@ -108,7 +108,7 @@ const JobFlowToSVG = {
     const edges = [];
     const lastPosByKey = new Map();
     const shapesByKey = new Map();
-    // 화살표를 이미 내보낸 셀(도형 객체). 이 셀의 다음 화살표는 팬아웃 — 키가 아닌 셀 단위라 같은 키가 새 셀로 다시 그려지면 첫 화살표는 같은 행부터 시도한다
+    // Cells (shape objects) that have already emitted an arrow. The next arrow from such a cell is a fan-out — tracked per cell, not per key, so when the same key is redrawn as a new cell its first arrow tries the same row first
     const usedAsSource = new Set();
     let prevTo = null;
     const ensureRow = (r) => {
@@ -141,7 +141,7 @@ const JobFlowToSVG = {
       for (let e = a; e < b; e++) if (colEdges[col][e]) return true;
       return false;
     };
-    // 키가 다른 도형이 있거나, 비어 있어도 위 행에서 세로선이 들어오거나 가로선이 양옆으로 관통하면 막힌 칸(같은 키 도형은 그대로 쓴다)
+    // A cell is blocked if it holds a shape with a different key, or, even when empty, a vertical line enters from the row above or a horizontal line passes through it (a shape with the same key is reused)
     const isCellBlocked = (row, col, key) => {
       const cell = grid[row] && grid[row].cells[col];
       if (cell) return cell.key !== key;
@@ -379,7 +379,7 @@ const JobFlowToSVG = {
     if (lastPart.toLowerCase().startsWith("on")) lastPart = lastPart.slice(2);
     return lastPart.replace(/\*+$/, '');
   },
-  // 객체 헤더. orchestrator로 선언된 객체는 열 위치와 무관하게 채움색·글자색·굵기를 바꿔 구별한다
+  // Object header. Objects declared as orchestrator get a different fill, text color and weight regardless of column position
   drawObjectHeader(s, name, fontSize, isOrchestrator) {
     const style = this.ORCHESTRATOR_HEADER_STYLE;
     const rectAttrs = isOrchestrator ? `fill="${style.fill}" stroke="${style.stroke}" stroke-width="${style.strokeWidth}"` : 'fill="none" stroke="gray"';
@@ -388,7 +388,7 @@ const JobFlowToSVG = {
     header += `<text x="${s.x + s.width/2}" y="${s.y + s.height/2}" text-anchor="middle" dominant-baseline="middle" font-size="${fontSize}"${textAttrs}>${this.escapeXml(name)}</text>`;
     return header;
   },
-  // 흰 글자 대비 6.4:1(WCAG AA)인 진녹색. 레인 색은 시각 편집기(JobFlowCanvasEditor)와 맞춘다
+  // Dark green with 6.4:1 contrast against white text (WCAG AA). Lane colors match the visual editor (JobFlowCanvasEditor)
   ORCHESTRATOR_HEADER_STYLE: { fill: '#0f6b53', stroke: '#0a4d3c', strokeWidth: 2, text: '#ffffff', fontWeight: 'bold' },
   calculateFontSize(text, maxWidth, maxHeight, baseFontSize = 14) {
     const charWidthRatio = 0.6;

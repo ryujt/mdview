@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -18,42 +18,42 @@
   <div id="layout">
     <aside id="sidebar" hidden>
       <div id="sidebar-header">
-        <span id="sidebar-title">파일</span>
+        <span id="sidebar-title">Files</span>
       </div>
       <nav id="tree"></nav>
     </aside>
-    <div id="sidebar-resizer" hidden role="separator" aria-orientation="vertical" aria-label="사이드바 크기 조절" title="드래그하여 크기 조절 (더블클릭으로 초기화)"></div>
+    <div id="sidebar-resizer" hidden role="separator" aria-orientation="vertical" aria-label="Resize sidebar" title="Drag to resize (double-click to reset)"></div>
     <div id="content">
       <header id="header-bar">
         <span id="filename-display"></span>
         <div id="toolbar-actions">
           <div id="export-menu-wrap">
-            <button id="export-menu-button" type="button" title="현재 문서 내보내기" aria-haspopup="menu" aria-expanded="false" aria-controls="export-menu">내보내기 <span aria-hidden="true">▾</span></button>
-            <div id="export-menu" role="menu" aria-label="내보내기" hidden>
-              <button id="export-pdf" type="button" role="menuitem">PDF로 저장…</button>
-              <button id="export-zip" type="button" role="menuitem">마크다운 ZIP으로 저장…</button>
+            <button id="export-menu-button" type="button" title="Export the current document" aria-haspopup="menu" aria-expanded="false" aria-controls="export-menu">Export <span aria-hidden="true">▾</span></button>
+            <div id="export-menu" role="menu" aria-label="Export" hidden>
+              <button id="export-pdf" type="button" role="menuitem">Save as PDF…</button>
+              <button id="export-zip" type="button" role="menuitem">Save as Markdown ZIP…</button>
             </div>
           </div>
           <span id="job-status" hidden></span>
           <span id="record-status" hidden>
             <span id="record-indicator" aria-hidden="true"></span>
             <span id="record-timer">00:00</span>
-            <span id="record-level" title="마이크 입력 레벨" aria-hidden="true"><span id="record-level-bar"></span></span>
-            <span id="record-events" title="기록된 이벤트 수"></span>
+            <span id="record-level" title="Microphone input level" aria-hidden="true"><span id="record-level-bar"></span></span>
+            <span id="record-events" title="Number of recorded events"></span>
           </span>
-          <select id="record-device" title="녹음 입력 장치 선택" aria-label="녹음 입력 장치 선택"></select>
-          <button id="record-button" type="button" title="오디오 녹화 시작" aria-label="오디오 녹화 시작" aria-pressed="false">
+          <select id="record-device" title="Select recording input device" aria-label="Select recording input device"></select>
+          <button id="record-button" type="button" title="Start audio recording" aria-label="Start audio recording" aria-pressed="false">
             <span class="rec-icon" aria-hidden="true"></span>
           </button>
         </div>
       </header>
       <main>
-        <div id="empty-state" hidden>왼쪽 사이드바에서 파일을 선택하세요.</div>
+        <div id="empty-state" hidden>Select a file from the sidebar on the left.</div>
         <div id="preview"></div>
       </main>
     </div>
   </div>
-  <button id="settings-button" type="button" aria-label="OpenAI 설정" title="OpenAI 설정" aria-haspopup="dialog" aria-controls="settings-dialog">
+  <button id="settings-button" type="button" aria-label="OpenAI settings" title="OpenAI settings" aria-haspopup="dialog" aria-controls="settings-dialog">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
       <path d="m9 3-.6 2.2-2 .9-2-.7-2 3.4 1.6 1.6-.2 2.2-1.5 1.5 2 3.5 2.1-.6 1.8 1 .5 2.1h4l.6-2.2 2-.9 2 .7 2-3.4-1.6-1.6.2-2.2 1.5-1.5-2-3.5-2.1.6-1.8-1L13 3Z"/>
       <circle cx="11.5" cy="11.5" r="3"/>
@@ -63,28 +63,28 @@
     <form id="settings-form" autocomplete="off">
       <div class="settings-heading">
         <div>
-          <h2 id="settings-title">OpenAI 설정</h2>
-          <p id="settings-description">녹음한 음성을 텍스트로 변환할 때 사용합니다.</p>
+          <h2 id="settings-title">OpenAI settings</h2>
+          <p id="settings-description">Used to transcribe recorded audio to text.</p>
         </div>
-        <button id="settings-close" class="settings-icon-button" type="button" aria-label="설정 닫기">×</button>
+        <button id="settings-close" class="settings-icon-button" type="button" aria-label="Close settings">×</button>
       </div>
       <fieldset id="settings-fields" disabled>
-        <label for="settings-api-key">OpenAI API 키 <span id="settings-key-badge"></span></label>
+        <label for="settings-api-key">OpenAI API key <span id="settings-key-badge"></span></label>
         <div class="settings-key-input">
           <input id="settings-api-key" type="password" name="mdview-api-key" autocomplete="new-password" autocapitalize="off" spellcheck="false" placeholder="sk-…" maxlength="4096" aria-describedby="settings-key-help" />
-          <button id="settings-key-visibility" type="button" aria-label="입력한 API 키 표시" aria-pressed="false">표시</button>
+          <button id="settings-key-visibility" type="button" aria-label="Show entered API key" aria-pressed="false">Show</button>
         </div>
         <p id="settings-key-help" class="settings-hint"></p>
-        <button id="settings-key-clear" class="settings-text-button" type="button" disabled>저장된 키 삭제</button>
-        <label for="settings-model" class="settings-model-label">전사 모델</label>
+        <button id="settings-key-clear" class="settings-text-button" type="button" disabled>Delete saved key</button>
+        <label for="settings-model" class="settings-model-label">Transcription model</label>
         <select id="settings-model" aria-describedby="settings-model-help"></select>
         <p id="settings-model-help" class="settings-hint"></p>
       </fieldset>
-      <p class="settings-privacy">설정은 이 컴퓨터의 사용자 계정에 저장됩니다. 음성 전사를 사용할 때 녹음이 OpenAI로 전송되며 API 사용 요금이 발생할 수 있습니다.</p>
+      <p class="settings-privacy">Settings are saved to your user account on this computer. When transcription is used, recordings are sent to OpenAI and API usage fees may apply.</p>
       <p id="settings-message" role="status" aria-live="polite"></p>
       <div class="settings-actions">
-        <button id="settings-cancel" type="button">닫기</button>
-        <button id="settings-save" class="settings-primary" type="submit" disabled>저장</button>
+        <button id="settings-cancel" type="button">Close</button>
+        <button id="settings-save" class="settings-primary" type="submit" disabled>Save</button>
       </div>
     </form>
   </dialog>

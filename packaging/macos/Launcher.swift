@@ -25,8 +25,8 @@ final class DropView: NSView {
 
 final class Launcher: NSObject, NSApplicationDelegate {
     private var window: NSWindow!
-    private var status = NSTextField(wrappingLabelWithString: "파일이나 폴더를 선택하면 기본 브라우저에서 열립니다.")
-    private var path = NSTextField(wrappingLabelWithString: "이 창에 파일이나 폴더를 끌어 놓아도 됩니다.")
+    private var status = NSTextField(wrappingLabelWithString: "Choose a file or folder to open it in your default browser.")
+    private var path = NSTextField(wrappingLabelWithString: "You can also drag a file or folder onto this window.")
     private var openFileButton: NSButton!
     private var openFolderButton: NSButton!
     private var browserButton: NSButton!
@@ -49,7 +49,7 @@ final class Launcher: NSObject, NSApplicationDelegate {
         content.openURL = { [weak self] url in self?.open(url) }
         window.contentView = content
 
-        let heading = NSTextField(labelWithString: "문서를 편하게 읽는 작은 도구")
+        let heading = NSTextField(labelWithString: "A small tool for reading documents comfortably")
         heading.font = .systemFont(ofSize: 24, weight: .semibold)
         status.font = .systemFont(ofSize: 13)
         status.textColor = .secondaryLabelColor
@@ -57,19 +57,19 @@ final class Launcher: NSObject, NSApplicationDelegate {
         path.textColor = .secondaryLabelColor
         path.maximumNumberOfLines = 3
         path.isSelectable = true
-        openFileButton = NSButton(title: "파일 열기…", target: self, action: #selector(chooseFile))
-        openFolderButton = NSButton(title: "폴더 열기…", target: self, action: #selector(chooseFolder))
+        openFileButton = NSButton(title: "Open File…", target: self, action: #selector(chooseFile))
+        openFolderButton = NSButton(title: "Open Folder…", target: self, action: #selector(chooseFolder))
         openFolderButton.keyEquivalent = "\r"
-        browserButton = NSButton(title: "브라우저 다시 열기", target: self, action: #selector(reopenBrowser))
-        stopButton = NSButton(title: "뷰어 중지", target: self, action: #selector(stop))
+        browserButton = NSButton(title: "Reopen Browser", target: self, action: #selector(reopenBrowser))
+        stopButton = NSButton(title: "Stop Viewer", target: self, action: #selector(stop))
         let choices = NSStackView(views: [openFolderButton, openFileButton])
         choices.spacing = 12
         let controls = NSStackView(views: [browserButton, stopButton])
         controls.spacing = 12
-        let note = NSTextField(wrappingLabelWithString: "녹음은 브라우저에서 먼저 저장해 주세요.\n뷰어를 중지하거나 앱을 종료하면 문서 서버도 종료됩니다.")
+        let note = NSTextField(wrappingLabelWithString: "Save any recording in the browser first.\nStopping the viewer or quitting the app also stops the document server.")
         note.font = .systemFont(ofSize: 11)
         note.textColor = .secondaryLabelColor
-        let guide = NSButton(title: "설치·사용 가이드", target: self, action: #selector(showGuide))
+        let guide = NSButton(title: "Install & Usage Guide", target: self, action: #selector(showGuide))
         guide.bezelStyle = .inline
         let stack = NSStackView(views: [heading, status, choices, path, controls, note, guide])
         stack.orientation = .vertical
@@ -98,18 +98,18 @@ final class Launcher: NSObject, NSApplicationDelegate {
         let appItem = NSMenuItem()
         menu.addItem(appItem)
         let appMenu = NSMenu()
-        appMenu.addItem(withTitle: "mdview 정보", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        appMenu.addItem(withTitle: "About mdview", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "mdview 종료", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenu.addItem(withTitle: "Quit mdview", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
         let fileItem = NSMenuItem()
         menu.addItem(fileItem)
-        let fileMenu = NSMenu(title: "파일")
-        fileMenu.addItem(withTitle: "파일 열기…", action: #selector(chooseFile), keyEquivalent: "o").target = self
-        let folderItem = fileMenu.addItem(withTitle: "폴더 열기…", action: #selector(chooseFolder), keyEquivalent: "o")
+        let fileMenu = NSMenu(title: "File")
+        fileMenu.addItem(withTitle: "Open File…", action: #selector(chooseFile), keyEquivalent: "o").target = self
+        let folderItem = fileMenu.addItem(withTitle: "Open Folder…", action: #selector(chooseFolder), keyEquivalent: "o")
         folderItem.keyEquivalentModifierMask = [.command, .shift]
         folderItem.target = self
-        fileMenu.addItem(withTitle: "설치·사용 가이드", action: #selector(showGuide), keyEquivalent: "?").target = self
+        fileMenu.addItem(withTitle: "Install & Usage Guide", action: #selector(showGuide), keyEquivalent: "?").target = self
         fileItem.submenu = fileMenu
         NSApp.mainMenu = menu
     }
@@ -120,8 +120,8 @@ final class Launcher: NSObject, NSApplicationDelegate {
     private func choose(directory: Bool) {
         guard process == nil else { return }
         let panel = NSOpenPanel()
-        panel.title = directory ? "열 폴더 선택" : "열 문서 선택"
-        panel.prompt = "열기"
+        panel.title = directory ? "Choose a Folder to Open" : "Choose a Document to Open"
+        panel.prompt = "Open"
         panel.canChooseDirectories = directory
         panel.canChooseFiles = !directory
         panel.allowsMultipleSelection = false
@@ -144,13 +144,13 @@ final class Launcher: NSObject, NSApplicationDelegate {
     private func open(_ url: URL) {
         window.makeKeyAndOrderFront(nil)
         guard process == nil else {
-            alert("뷰어가 실행 중입니다", "브라우저에서 녹음을 저장하고 ‘뷰어 중지’를 누른 뒤 다른 문서를 열어 주세요.")
+            alert("The viewer is running", "Save any recording in the browser and click “Stop Viewer” before opening another document.")
             return
         }
         let target = url.standardizedFileURL
         var directory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: target.path, isDirectory: &directory) else {
-            alert("파일을 찾을 수 없습니다", target.path)
+            alert("File not found", target.path)
             return
         }
         let child = Process()
@@ -167,7 +167,7 @@ final class Launcher: NSObject, NSApplicationDelegate {
         process = child
         pipe = childPipe
         path.stringValue = target.path
-        status.stringValue = "브라우저를 여는 중…"
+        status.stringValue = "Opening browser…"
         childPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
             guard !data.isEmpty else { handle.readabilityHandler = nil; return }
@@ -185,9 +185,9 @@ final class Launcher: NSObject, NSApplicationDelegate {
             child.terminationHandler = nil
             process = nil
             pipe = nil
-            status.stringValue = "실행하지 못했습니다. 파일이나 폴더를 다시 선택해 주세요."
+            status.stringValue = "Couldn’t start. Please choose the file or folder again."
             updateButtons()
-            alert("mdview 실행 실패", error.localizedDescription)
+            alert("Failed to start mdview", error.localizedDescription)
         }
     }
 
@@ -200,7 +200,7 @@ final class Launcher: NSObject, NSApplicationDelegate {
                 if let range = line.range(of: " at http://localhost:", options: .backwards),
                    let url = URL(string: String(line[range.lowerBound...].dropFirst(4))) {
                     serverURL = url
-                    status.stringValue = "실행 중 · \(url.absoluteString)"
+                    status.stringValue = "Running · \(url.absoluteString)"
                     updateButtons()
                 }
             }
@@ -215,12 +215,12 @@ final class Launcher: NSObject, NSApplicationDelegate {
         serverURL = nil
         let expected = stopping || quitting
         stopping = false
-        status.stringValue = expected ? "중지되었습니다. 다른 파일이나 폴더를 열 수 있습니다." : "뷰어가 종료되었습니다."
+        status.stringValue = expected ? "Stopped. You can open another file or folder." : "The viewer has exited."
         updateButtons()
         if quitting {
             NSApp.reply(toApplicationShouldTerminate: true)
         } else if !expected && child.terminationStatus != 0 {
-            alert("뷰어가 종료되었습니다", String(output.suffix(2000)))
+            alert("The viewer has exited", String(output.suffix(2000)))
         }
     }
 
@@ -231,7 +231,7 @@ final class Launcher: NSObject, NSApplicationDelegate {
     @objc private func stop() {
         guard let child = process, !stopping else { return }
         stopping = true
-        status.stringValue = "종료 중… 전사·프롬프트 후처리가 끝나면 중지됩니다."
+        status.stringValue = "Stopping… The viewer will stop once transcription and prompt post-processing finish."
         updateButtons()
         if child.isRunning { child.terminate() }
     }

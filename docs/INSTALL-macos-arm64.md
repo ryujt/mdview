@@ -76,11 +76,11 @@ Save the recording in the browser before quitting. Quitting while recording disc
 Set your OpenAI API key to convert speech to text.
 
 1. Click the **settings gear in the bottom-left corner** of the mdview web interface. It is in the same place in both file and folder modes.
-2. Enter your key in **OpenAI API Key**.
-3. Choose a **Transcription Model**. The default is **Whisper 1 (`whisper-1`)**.
+2. Enter your key in **OpenAI API key**.
+3. Choose a **Transcription model**. The default is **Whisper 1 (`whisper-1`)**.
 4. Click **Save**. The changes apply to the next recording without restarting the app.
 
-The browser shows that a key is configured without receiving its value. Leave the field empty when saving to keep your current key. To replace it, enter a new key and save. To remove it, choose **Delete Saved Key → Save**. Closing the dialog or pressing Esc discards unsaved changes.
+The browser shows that a key is configured without receiving its value. Leave the field empty when saving to keep your current key. To replace it, enter a new key and save. To remove it, choose **Delete saved key → Save**. Closing the dialog or pressing Esc discards unsaved changes.
 
 Settings are stored in `~/.config/mdview/config.json` with read and write permissions for the account owner only (0600). The key stays out of browser storage. The desktop app and CLI share settings when run under the same account.
 
